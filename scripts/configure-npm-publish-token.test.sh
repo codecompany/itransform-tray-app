@@ -89,7 +89,7 @@ if [[ "$1 $2" == "token revoke" ]]; then
   fi
   [[ "${NPM_CONFIG_OTP}" == "333333" ]]
   rm -f "${MOCK_STATE}/bootstrap-token"
-  printf revoked > "${MOCK_STATE}/bootstrap-revoked"
+  printf x >> "${MOCK_STATE}/bootstrap-revoked"
   printf '["bootstrap-key"]\n'
   exit 0
 fi
@@ -110,7 +110,7 @@ if [[ "${arguments}" == *" --scopes @code-company "* ]]; then
   [[ "${NPM_CONFIG_PASSWORD:-}" == "test password" ]]
   [[ "${NPM_CONFIG_OTP}" == "111111" ]]
   printf created > "${MOCK_STATE}/bootstrap-token"
-  printf '{\n  "token": "npm_test_bootstrap_token_1234567890"\n}\n'
+  printf 'npm notice token created\n{\n  "token": "npm_test_bootstrap_token_1234567890",\n  "permissions": [{"name": "package", "action": "write"}],\n  "scopes": [{"name": "@code-company", "type": "package"}]\n}\n'
   exit 0
 fi
 
@@ -131,7 +131,7 @@ if [[ "${MOCK_MODE:-success}" == "malformed" ]]; then
   echo "npm password: not-json"
   exit 0
 fi
-printf 'npm password: {\n  "token": "npm_test_publish_token_1234567890"\n}\n'
+printf 'npm notice token created\n{\n  "token": "npm_test_publish_token_1234567890",\n  "permissions": [{"name": "package", "action": "write"}],\n  "scopes": [{"name": "@code-company/pulsetray", "type": "package"}]\n}\n'
 MOCK_NPM
 
 cat > "${TEMPORARY}/bin/gh" <<'MOCK_GH'
@@ -169,6 +169,13 @@ run_case() {
         bash "${SCRIPT}"
     return
   fi
+  if [[ "${mode}" == "stale" ]]; then
+    printf created > "${state}/bootstrap-token"
+    printf 'test password\n333333\n111111\n333333\n222222\n' |
+      env PATH="${TEMPORARY}/bin:${PATH}" MOCK_MODE="${mode}" MOCK_STATE="${state}" \
+        bash "${SCRIPT}"
+    return
+  fi
   printf 'test password\n111111\n333333\n222222\n' |
     env PATH="${TEMPORARY}/bin:${PATH}" MOCK_MODE="${mode}" MOCK_STATE="${state}" \
       bash "${SCRIPT}"
@@ -177,6 +184,9 @@ run_case() {
 run_case success | grep -q "NPM_TOKEN configurado no GitHub."
 [[ -e "${TEMPORARY}/success/publish-called" ]]
 [[ -e "${TEMPORARY}/success/bootstrap-revoked" ]]
+
+run_case stale | grep -q "NPM_TOKEN configurado no GitHub."
+[[ "$(wc -c < "${TEMPORARY}/stale/bootstrap-revoked" | tr -d ' ')" == "2" ]]
 
 run_case existing | grep -q "NPM_TOKEN configurado no GitHub."
 [[ ! -e "${TEMPORARY}/existing/publish-called" ]]

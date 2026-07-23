@@ -23,6 +23,10 @@ the package-specific token. Confirm that the script reports access
 confirmation, bootstrap revocation, and `NPM_TOKEN` configuration, then rerun
 only failed jobs for the existing release workflow.
 
+If a prior attempt created `pulsetray-bootstrap` but stopped before publishing,
+rerun the helper. It locates the token by name, requests an OTP to revoke it,
+and only then creates a replacement.
+
 ## Rollback
 
 Delete the GitHub secret with

@@ -28,6 +28,11 @@ namespace rather than the intended organization. The correct npm organization
 is `code-company`; `osvaldoandrade` is its owner and belongs to
 `code-company:developers`.
 
+The first correctly scoped token was created, but its JSON response included
+nested `permissions` and `scopes` objects. Selecting text from the final
+opening brace produced an invalid fragment and left the one-day bootstrap token
+active without exposing its full value to the operator.
+
 The publishing workflow requires a granular token with scope write permission
 and temporary 2FA bypass. The helper must handle the interactive exchange
 without writing the password, OTP, or token to a file, command argument, log,
@@ -45,7 +50,9 @@ an environment-scoped npm registry setting, and revokes it immediately after
 publication. Finally, it creates a 90-day granular token restricted to
 `@code-company/pulsetray`, validates the final JSON token, and writes it to
 GitHub through standard input. Every state-changing stage fails closed before
-the next one starts.
+the next one starts. Before creating a bootstrap token, the helper revokes any
+same-name token left by an interrupted attempt. Token extraction walks balanced
+JSON objects and accepts only an object with a string `token` field.
 
 ## Reversibility
 

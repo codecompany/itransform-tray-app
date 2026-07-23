@@ -28,12 +28,42 @@ extract_token() {
   node -e '
     const fs = require("node:fs");
     const response = fs.readFileSync(0, "utf8");
-    const start = response.lastIndexOf("{");
-    const end = response.lastIndexOf("}");
-    if (start < 0 || end <= start) process.exit(1);
-    const result = JSON.parse(response.slice(start, end + 1));
-    if (typeof result.token !== "string") process.exit(1);
-    process.stdout.write(result.token);
+    for (let start = response.indexOf("{"); start >= 0; start = response.indexOf("{", start + 1)) {
+      let depth = 0;
+      let inString = false;
+      let escaped = false;
+      for (let end = start; end < response.length; end += 1) {
+        const character = response[end];
+        if (inString) {
+          if (escaped) {
+            escaped = false;
+          } else if (character === "\\") {
+            escaped = true;
+          } else if (character === "\"") {
+            inString = false;
+          }
+          continue;
+        }
+        if (character === "\"") {
+          inString = true;
+        } else if (character === "{") {
+          depth += 1;
+        } else if (character === "}") {
+          depth -= 1;
+          if (depth === 0) {
+            try {
+              const result = JSON.parse(response.slice(start, end + 1));
+              if (typeof result.token === "string") {
+                process.stdout.write(result.token);
+                process.exit(0);
+              }
+            } catch {}
+            break;
+          }
+        }
+      }
+    }
+    process.exit(1);
   '
 }
 
@@ -149,6 +179,11 @@ create_npm_token() {
 
   created_token="$(printf "%s" "${token_response}" | extract_token)" || {
     echo "O npm retornou uma resposta de token inválida." >&2
+    if [[ "${token_name}" == "${BOOTSTRAP_TOKEN_NAME}" ]]; then
+      revoke_bootstrap_tokens || {
+        echo "Revogue manualmente o token ${BOOTSTRAP_TOKEN_NAME} no npm." >&2
+      }
+    fi
     return 1
   }
   [[ "${created_token}" == npm_* && "${#created_token}" -ge 20 ]] || {
@@ -292,6 +327,8 @@ echo
 
 if [[ "${lookup_status}" -ne 0 ]]; then
   echo "A versão ${PACKAGE_NAME}@${package_version} ainda não existe no npm."
+
+  revoke_bootstrap_tokens || exit $?
 
   create_npm_token "${BOOTSTRAP_TOKEN_NAME}" "scope" "1" \
     "autorizar o token temporário de publicação" || exit $?
