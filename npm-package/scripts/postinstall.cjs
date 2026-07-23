@@ -33,7 +33,7 @@ function headers(url) {
   const hostname = new URL(url).hostname.toLowerCase();
   const isGitHub = hostname === "github.com" || hostname.endsWith(".github.com");
   return {
-    "User-Agent": "@codecompany/pulsetray postinstall",
+    "User-Agent": "@code-company/pulsetray postinstall",
     ...(token && isGitHub ? { Authorization: `Bearer ${token}` } : {})
   };
 }

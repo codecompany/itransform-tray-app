@@ -55,7 +55,7 @@ ele baixa a versão portátil correspondente, valida o SHA-256 e troca o payload
 local de forma atômica:
 
 ```sh
-npm install -g @codecompany/pulsetray
+npm install -g @code-company/pulsetray
 pulsetray --help
 pulsetray --version
 pulsetray

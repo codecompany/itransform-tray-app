@@ -22,7 +22,7 @@ concurrency:
 env:
   NODE_VERSION: "20"
   RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
-  NPM_PACKAGE: "@codecompany/pulsetray"
+  NPM_PACKAGE: "@code-company/pulsetray"
 
 jobs:
   prepare:
@@ -169,7 +169,7 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           registry-url: "https://registry.npmjs.org"
-          scope: "@codecompany"
+          scope: "@code-company"
       - name: Pack and publish
         working-directory: npm-package
         env:
@@ -194,7 +194,7 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           registry-url: "https://registry.npmjs.org"
-          scope: "@codecompany"
+          scope: "@code-company"
       - name: Wait for npm replication
         shell: bash
         run: |

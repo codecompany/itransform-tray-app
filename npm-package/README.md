@@ -5,7 +5,7 @@ correspondente. O download é validado com SHA-256 e não executa instaladores
 administrativos.
 
 ```sh
-npm install -g @codecompany/pulsetray
+npm install -g @code-company/pulsetray
 pulsetray
 ```
 
