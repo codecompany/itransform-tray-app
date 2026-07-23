@@ -32,7 +32,7 @@ if [[ "$1" == "publish" ]]; then
     exit 1
   fi
   env | grep -Fqx \
-    'npm_config_//registry.npmjs.org/:_authToken=npm_test_bootstrap_token_1234567890'
+    'npm_config_//registry.npmjs.org/:_authToken=npm_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
   printf published > "${MOCK_STATE}/published"
   exit 0
 fi
@@ -100,6 +100,7 @@ fi
 
 [[ "$1 $2" == "token create" ]]
 arguments=" $* "
+[[ "${arguments}" != *" --json "* ]]
 
 if [[ "${arguments}" == *" --scopes @code-company "* ]]; then
   if [[ "${MOCK_MODE:-success}" == "bootstrap-rejected" ]]; then
@@ -114,7 +115,13 @@ if [[ "${arguments}" == *" --scopes @code-company "* ]]; then
   [[ "${NPM_CONFIG_PASSWORD:-}" == "test password" ]]
   [[ "${NPM_CONFIG_OTP}" == "111111" ]]
   printf created > "${MOCK_STATE}/bootstrap-token"
-  printf 'npm notice token created\n{\n  "token": "npm_test_bootstrap_token_1234567890",\n  "permissions": [{"name": "package", "action": "write"}],\n  "scopes": [{"name": "@code-company", "type": "package"}]\n}\n'
+  if [[ "${MOCK_MODE:-success}" == "redacted-bootstrap" ]]; then
+    printf 'Created token npm_***\n'
+  elif [[ "${MOCK_MODE:-success}" == "legacy-json" ]]; then
+    printf 'npm notice token created\n{\n  "token": "npm_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",\n  "permissions": [{"name": "package", "action": "write"}],\n  "scopes": [{"name": "@code-company", "type": "package"}]\n}\n'
+  else
+    printf 'npm notice token created\nCreated token npm_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\nexpires: 2026-07-24T00:00:00.000Z\n'
+  fi
   exit 0
 fi
 
@@ -135,7 +142,11 @@ if [[ "${MOCK_MODE:-success}" == "malformed" ]]; then
   echo "npm password: not-json"
   exit 0
 fi
-printf 'npm notice token created\n{\n  "token": "npm_test_publish_token_1234567890",\n  "permissions": [{"name": "package", "action": "write"}],\n  "scopes": [{"name": "@code-company/pulsetray", "type": "package"}]\n}\n'
+if [[ "${MOCK_MODE:-success}" == "legacy-json" ]]; then
+  printf 'npm notice token created\n{\n  "token": "npm_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",\n  "permissions": [{"name": "package", "action": "write"}],\n  "scopes": [{"name": "@code-company/pulsetray", "type": "package"}]\n}\n'
+else
+  printf 'npm notice token created\nCreated token npm_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\nexpires: 2026-10-21T00:00:00.000Z\n'
+fi
 MOCK_NPM
 
 cat > "${TEMPORARY}/bin/gh" <<'MOCK_GH'
@@ -149,7 +160,7 @@ fi
 if [[ "$1 $2" == "secret set" ]]; then
   token="$(cat)"
   printf called > "${MOCK_STATE}/gh-called"
-  [[ "${token}" == "npm_test_publish_token_1234567890" ]]
+  [[ "${token}" == "npm_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" ]]
   printf configured > "${MOCK_STATE}/configured"
   exit 0
 fi
@@ -189,6 +200,10 @@ run_case success | grep -q "NPM_TOKEN configurado no GitHub."
 [[ -e "${TEMPORARY}/success/publish-called" ]]
 [[ -e "${TEMPORARY}/success/bootstrap-revoked" ]]
 
+run_case legacy-json | grep -q "NPM_TOKEN configurado no GitHub."
+[[ -e "${TEMPORARY}/legacy-json/publish-called" ]]
+[[ -e "${TEMPORARY}/legacy-json/bootstrap-revoked" ]]
+
 run_case stale | grep -q "NPM_TOKEN configurado no GitHub."
 [[ "$(wc -c < "${TEMPORARY}/stale/bootstrap-revoked" | tr -d ' ')" == "2" ]]
 
@@ -215,6 +230,13 @@ if run_case bootstrap-rejected >/dev/null 2>&1; then
   exit 1
 fi
 [[ ! -e "${TEMPORARY}/bootstrap-rejected/publish-called" ]]
+
+if run_case redacted-bootstrap >/dev/null 2>&1; then
+  echo "Token temporário mascarado deveria impedir a publicação." >&2
+  exit 1
+fi
+[[ ! -e "${TEMPORARY}/redacted-bootstrap/publish-called" ]]
+[[ -e "${TEMPORARY}/redacted-bootstrap/bootstrap-revoked" ]]
 
 if run_case token-rejected >/dev/null 2>&1; then
   echo "Falha ao criar token definitivo deveria impedir o secret." >&2

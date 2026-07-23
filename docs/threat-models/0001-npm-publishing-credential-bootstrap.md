@@ -20,7 +20,7 @@ cannot read Actions secret values.
 | Threat | Mitigation |
 |---|---|
 | Spoofing the npm or GitHub destination | Both CLIs use their configured HTTPS registries and authenticated accounts. |
-| Tampering with mixed npm output | The script extracts and validates a complete JSON token before invoking `gh`. |
+| Tampering with mixed npm output | The script accepts only an anchored npm token line with the expected token shape, retains balanced-JSON compatibility for older clients, and validates the complete value before invoking `gh`. |
 | Repudiation of secret changes | GitHub records the secret update timestamp; npm records the named token. |
 | Disclosure through terminal or files | Silent prompts, no temporary credential file, no credential log, token transfer through standard input, and publish authentication through a process-scoped environment variable. |
 | Denial of service through malformed output | Parsing fails before `gh`; mocks cover malformed and rejected responses. |
@@ -28,7 +28,7 @@ cannot read Actions secret values.
 | Publishing under the wrong identity | The helper requires an organization role plus membership in `code-company:developers` before any credential or registry write and fails closed after an unsuccessful account switch. |
 | Publishing a package without matching binaries | The script requires the same-version public GitHub Release and `SHA256SUMS.txt` asset before first publication. |
 | Reusing an immutable bad version | The script publishes only the version declared in `npm-package/package.json`; correction requires a higher version. |
-| Orphaning a bootstrap token after local failure | The helper selects same-name bootstrap tokens from JSON, correlates them with npm's unique shortened revocation IDs, fails closed on incomplete or ambiguous correlation, revokes them before every creation, and attempts immediate revocation when token parsing fails. |
+| Orphaning a bootstrap token after local failure | The helper selects same-name bootstrap tokens from JSON, correlates them with npm's unique shortened revocation IDs, fails closed on incomplete or ambiguous correlation, revokes them before every creation, and attempts immediate revocation when token parsing or validation fails. |
 
 ## Residual risk and response
 

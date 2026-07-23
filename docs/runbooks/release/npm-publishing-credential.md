@@ -23,6 +23,11 @@ the package-specific token. Confirm that the script reports access
 confirmation, bootstrap revocation, and `NPM_TOKEN` configuration, then rerun
 only failed jobs for the existing release workflow.
 
+The helper intentionally creates tokens without `--json`: npm 11 masks the
+token value as `npm_***` in JSON output even though the registry has created
+the credential. The helper accepts the one-time `Created token` line and never
+prints or writes its value.
+
 If a prior attempt created `pulsetray-bootstrap` but stopped before publishing,
 rerun the helper. It locates the token by name, correlates the partial token
 shown by npm with its unique shortened revocation ID, requests an OTP to revoke

@@ -39,6 +39,12 @@ token listings. Passing that masked value to `npm token revoke` produced
 unique shortened revocation ID together with the same partial token value
 returned by JSON.
 
+The same npm 11 output layer masks a newly created token as `npm_***` when
+`npm token create --json` is used. The registry still returns `201` and creates
+the token, but the masked CLI output is not a usable publishing credential.
+The non-JSON create output deliberately emits one unredacted `Created token`
+line because creation is the only opportunity to retrieve the full value.
+
 The publishing workflow requires a granular token with scope write permission
 and temporary 2FA bypass. The helper must handle the interactive exchange
 without writing the password, OTP, or token to a file, command argument, log,
@@ -61,7 +67,11 @@ same-name token left by an interrupted attempt. It selects those tokens by name
 from JSON and correlates their partial values with the unique shortened IDs in
 the human-readable listing; it fails closed unless every selected token has
 exactly one ID. Token extraction walks balanced JSON objects and accepts only
-an object with a string `token` field.
+an object with a string `token` field for compatibility with older npm
+versions. With npm 11, creation uses the non-JSON output and extracts only an
+anchored `Created token` line whose value matches npm's documented token
+shape. A masked or malformed bootstrap response fails before publication and
+triggers immediate revocation.
 
 ## Reversibility
 

@@ -28,6 +28,11 @@ extract_token() {
   node -e '
     const fs = require("node:fs");
     const response = fs.readFileSync(0, "utf8");
+    const created = response.match(/^Created token ((?:npm|npms)_[A-Za-z0-9]{36,48})\s*$/m);
+    if (created) {
+      process.stdout.write(created[1]);
+      process.exit(0);
+    }
     for (let start = response.indexOf("{"); start >= 0; start = response.indexOf("{", start + 1)) {
       let depth = 0;
       let inString = false;
@@ -132,7 +137,6 @@ create_npm_token() {
     --expires "${token_expiry}"
     --packages-and-scopes-permission read-write
     --bypass-2fa
-    --json
   )
 
   if [[ "${token_access}" == "scope" ]]; then
@@ -186,8 +190,13 @@ create_npm_token() {
     fi
     return 1
   }
-  [[ "${created_token}" == npm_* && "${#created_token}" -ge 20 ]] || {
+  [[ "${created_token}" =~ ^npms?_[A-Za-z0-9]{36,48}$ ]] || {
     echo "O npm retornou um token inválido." >&2
+    if [[ "${token_name}" == "${BOOTSTRAP_TOKEN_NAME}" ]]; then
+      revoke_bootstrap_tokens || {
+        echo "Revogue manualmente o token ${BOOTSTRAP_TOKEN_NAME} no npm." >&2
+      }
+    fi
     return 1
   }
 
