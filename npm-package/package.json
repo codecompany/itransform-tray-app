@@ -1,0 +1,26 @@
+{
+  "name": "@codecompany/pulsetray",
+  "version": "0.1.0",
+  "description": "Portable PulseTray installer and launcher",
+  "license": "UNLICENSED",
+  "homepage": "https://github.com/codecompany/itransform-tray-app#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/codecompany/itransform-tray-app.git",
+    "directory": "npm-package"
+  },
+  "bin": {
+    "pulsetray": "bin/pulsetray.cjs"
+  },
+  "scripts": {
+    "postinstall": "node scripts/postinstall.cjs"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "files": [
+    "bin/",
+    "scripts/",
+    "README.md"
+  ]
+}

@@ -1,0 +1,10 @@
+node_modules/
+dist/
+release/
+coverage/
+.cache/
+.env
+*.log
+*.tgz
+npm-package/native/
+.DS_Store

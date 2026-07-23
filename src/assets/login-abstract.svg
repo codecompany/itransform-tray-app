@@ -1,0 +1,27 @@
+<svg width="900" height="900" viewBox="0 0 900 900" xmlns="http://www.w3.org/2000/svg" fill="none">
+  <defs>
+    <radialGradient id="halo" cx="0.5" cy="0.5" r="0.8">
+      <stop offset="0" stop-color="#86efac" stop-opacity="0.35"/>
+      <stop offset="1" stop-color="#86efac" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="wave" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#14b8a6" stop-opacity="0.25"/>
+      <stop offset="1" stop-color="#22c55e" stop-opacity="0.05"/>
+    </linearGradient>
+    <pattern id="grid" width="50" height="50" patternUnits="userSpaceOnUse">
+      <rect x="0" y="0" width="50" height="50" fill="transparent"/>
+      <path d="M0 0H50V50" stroke="#86efac" stroke-opacity="0.12" stroke-width="1"/>
+      <circle cx="0" cy="0" r="2" fill="#34d399" fill-opacity="0.5"/>
+    </pattern>
+  </defs>
+  <rect width="900" height="900" fill="url(#grid)"/>
+  <circle cx="150" cy="200" r="220" fill="url(#halo)"/>
+  <circle cx="700" cy="80" r="160" fill="url(#halo)"/>
+  <path d="M-20 520C120 440 260 420 400 460C520 494 640 480 760 420C840 380 900 320 940 260V960H-20V520Z" fill="url(#wave)"/>
+  <path d="M-30 610C100 540 220 560 360 610C480 650 620 640 740 600C830 570 900 520 950 460V960H-30V610Z" fill="#bbf7d0" fill-opacity="0.12"/>
+  <g opacity="0.4" stroke="#6ee7b7" stroke-width="1">
+    <path d="M80 120C120 160 160 200 220 210" stroke-linecap="round"/>
+    <path d="M540 80C600 140 640 170 720 180" stroke-linecap="round"/>
+    <path d="M100 740C200 780 320 760 420 710" stroke-linecap="round"/>
+  </g>
+</svg>
