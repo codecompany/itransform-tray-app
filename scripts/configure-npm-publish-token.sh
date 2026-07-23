@@ -196,7 +196,9 @@ create_npm_token() {
 
 revoke_bootstrap_tokens() {
   local token_list
+  local token_list_human
   local list_status
+  local human_status
   local token_keys_text
   local token_key
   local revoke_response
@@ -215,22 +217,42 @@ revoke_bootstrap_tokens() {
     return "${list_status}"
   fi
 
+  set +e
+  token_list_human="$(npm token list 2>&1)"
+  human_status=$?
+  set -e
+  if [[ "${human_status}" -ne 0 ]]; then
+    error_code="$(npm_error_code "${token_list_human}")"
+    echo "Não foi possível obter os IDs de revogação (${error_code:-erro npm})." >&2
+    return "${human_status}"
+  fi
+
   token_keys_text="$(
-    printf "%s" "${token_list}" |
+    printf "%s\0%s" "${token_list}" "${token_list_human}" |
       node -e '
         const fs = require("node:fs");
         const name = process.argv[1];
-        const tokens = JSON.parse(fs.readFileSync(0, "utf8"));
-        const keys = tokens
-          .filter((token) => token.name === name && typeof token.key === "string")
-          .map((token) => token.key);
-        process.stdout.write(keys.join("\n"));
+        const input = fs.readFileSync(0);
+        const separator = input.indexOf(0);
+        if (separator < 0) process.exit(1);
+        const tokens = JSON.parse(input.subarray(0, separator).toString("utf8"));
+        const targetTokens = new Set(tokens
+          .filter((token) => token.name === name && typeof token.token === "string")
+          .map((token) => token.token));
+        const ids = [];
+        const human = input.subarray(separator + 1).toString("utf8");
+        for (const line of human.split(/\r?\n/)) {
+          const match = line.match(/^Token (\S+)… with id ([A-Za-z0-9]+) created /);
+          if (match && targetTokens.has(match[1])) ids.push(match[2]);
+        }
+        if (new Set(ids).size !== targetTokens.size) process.exit(1);
+        process.stdout.write([...new Set(ids)].join("\n"));
       ' "${BOOTSTRAP_TOKEN_NAME}"
   )" || {
     echo "A lista de tokens retornada pelo npm é inválida." >&2
     return 1
   }
-  unset token_list
+  unset token_list token_list_human
 
   [[ -n "${token_keys_text}" ]] || return 0
   while IFS= read -r token_key; do

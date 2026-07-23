@@ -28,7 +28,7 @@ cannot read Actions secret values.
 | Publishing under the wrong identity | The helper requires an organization role plus membership in `code-company:developers` before any credential or registry write and fails closed after an unsuccessful account switch. |
 | Publishing a package without matching binaries | The script requires the same-version public GitHub Release and `SHA256SUMS.txt` asset before first publication. |
 | Reusing an immutable bad version | The script publishes only the version declared in `npm-package/package.json`; correction requires a higher version. |
-| Orphaning a bootstrap token after local failure | The helper revokes same-name bootstrap tokens before every creation and attempts immediate revocation when token parsing fails. |
+| Orphaning a bootstrap token after local failure | The helper selects same-name bootstrap tokens from JSON, correlates them with npm's unique shortened revocation IDs, fails closed on incomplete or ambiguous correlation, revokes them before every creation, and attempts immediate revocation when token parsing fails. |
 
 ## Residual risk and response
 

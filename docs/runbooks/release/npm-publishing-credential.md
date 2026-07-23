@@ -24,8 +24,10 @@ confirmation, bootstrap revocation, and `NPM_TOKEN` configuration, then rerun
 only failed jobs for the existing release workflow.
 
 If a prior attempt created `pulsetray-bootstrap` but stopped before publishing,
-rerun the helper. It locates the token by name, requests an OTP to revoke it,
-and only then creates a replacement.
+rerun the helper. It locates the token by name, correlates the partial token
+shown by npm with its unique shortened revocation ID, requests an OTP to revoke
+it, and only then creates a replacement. Do not pass the masked JSON key `***`
+to `npm token revoke`.
 
 ## Rollback
 

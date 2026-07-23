@@ -33,6 +33,12 @@ nested `permissions` and `scopes` objects. Selecting text from the final
 opening brace produced an invalid fragment and left the one-day bootstrap token
 active without exposing its full value to the operator.
 
+The npm CLI also masks each revocation key as `***` in JSON and parseable
+token listings. Passing that masked value to `npm token revoke` produced
+`Unknown token id or value "***"`. Its human-readable listing still exposes a
+unique shortened revocation ID together with the same partial token value
+returned by JSON.
+
 The publishing workflow requires a granular token with scope write permission
 and temporary 2FA bypass. The helper must handle the interactive exchange
 without writing the password, OTP, or token to a file, command argument, log,
@@ -51,8 +57,11 @@ publication. Finally, it creates a 90-day granular token restricted to
 `@code-company/pulsetray`, validates the final JSON token, and writes it to
 GitHub through standard input. Every state-changing stage fails closed before
 the next one starts. Before creating a bootstrap token, the helper revokes any
-same-name token left by an interrupted attempt. Token extraction walks balanced
-JSON objects and accepts only an object with a string `token` field.
+same-name token left by an interrupted attempt. It selects those tokens by name
+from JSON and correlates their partial values with the unique shortened IDs in
+the human-readable listing; it fails closed unless every selected token has
+exactly one ID. Token extraction walks balanced JSON objects and accepts only
+an object with a string `token` field.
 
 ## Reversibility
 

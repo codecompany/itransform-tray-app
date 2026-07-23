@@ -57,8 +57,8 @@ if [[ "$1" == "login" ]]; then
   exit 0
 fi
 
-if [[ "$1 $2 $3" == "org ls code-company" ]]; then
-  if [[ "$4" == "osvaldoandrade" ]]; then
+if [[ "$1 $2 ${3:-}" == "org ls code-company" ]]; then
+  if [[ "${4:-}" == "osvaldoandrade" ]]; then
     printf '{"osvaldoandrade":"owner"}\n'
   else
     printf '{}\n'
@@ -66,22 +66,26 @@ if [[ "$1 $2 $3" == "org ls code-company" ]]; then
   exit 0
 fi
 
-if [[ "$1 $2 $3" == "team ls code-company:developers" ]]; then
+if [[ "$1 $2 ${3:-}" == "team ls code-company:developers" ]]; then
   printf '["osvaldoandrade"]\n'
   exit 0
 fi
 
 if [[ "$1 $2" == "token list" ]]; then
   if [[ -f "${MOCK_STATE}/bootstrap-token" ]]; then
-    printf '[{"name":"pulsetray-bootstrap","key":"bootstrap-key"}]\n'
+    if [[ " $* " == *" --json "* ]]; then
+      printf '[{"name":"pulsetray-bootstrap","key":"***","token":"npm_test...7890"}]\n'
+    else
+      printf 'Token npm_test...7890… with id abc123 created 2026-07-23\n'
+    fi
   else
-    printf '[]\n'
+    [[ " $* " == *" --json "* ]] && printf '[]\n'
   fi
   exit 0
 fi
 
 if [[ "$1 $2" == "token revoke" ]]; then
-  [[ "$3" == "bootstrap-key" ]]
+  [[ "$3" == "abc123" ]]
   if [[ -z "${NPM_CONFIG_OTP:-}" ]]; then
     echo "npm notice Please check your email for a one-time password" >&2
     echo "npm error code EOTP" >&2
@@ -90,7 +94,7 @@ if [[ "$1 $2" == "token revoke" ]]; then
   [[ "${NPM_CONFIG_OTP}" == "333333" ]]
   rm -f "${MOCK_STATE}/bootstrap-token"
   printf x >> "${MOCK_STATE}/bootstrap-revoked"
-  printf '["bootstrap-key"]\n'
+  printf '["abc123"]\n'
   exit 0
 fi
 
