@@ -18,7 +18,7 @@ set -euo pipefail
 
 if [[ "$1" == "view" ]]; then
   if [[ -f "${MOCK_STATE}/published" ]]; then
-    printf '"0.1.3"\n'
+    printf '"0.1.4"\n'
     exit 0
   fi
   echo "npm error code E404" >&2
