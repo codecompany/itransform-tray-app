@@ -39,6 +39,15 @@ PULSETRAY_BUILD_CACHE="${XDG_CACHE_HOME:-${TMPDIR:-/tmp}/pulsetray-build-cache}"
 export ELECTRON_BUILDER_CACHE="${ELECTRON_BUILDER_CACHE:-${PULSETRAY_BUILD_CACHE}/electron-builder}"
 export ELECTRON_CACHE="${ELECTRON_CACHE:-${PULSETRAY_BUILD_CACHE}/electron}"
 export npm_config_cache="${npm_config_cache:-${REPO_ROOT}/.cache/npm}"
+
+# GitHub Actions expands missing secrets to empty strings. electron-builder
+# interprets an empty CSC_LINK as the current directory instead of "unset".
+for signing_variable in CSC_LINK CSC_KEY_PASSWORD CSC_NAME; do
+  if [[ -z "${!signing_variable:-}" ]]; then
+    unset "${signing_variable}"
+  fi
+done
+
 mkdir -p "${ELECTRON_BUILDER_CACHE}" "${ELECTRON_CACHE}" "${npm_config_cache}"
 cd "${REPO_ROOT}"
 
