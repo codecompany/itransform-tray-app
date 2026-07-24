@@ -3,7 +3,8 @@ import type {
   EmployeeOption,
   EmployeeProfile,
   FeedbackDimension,
-  FeedbackDraft
+  FeedbackDraft,
+  FeedbackTaxonomy
 } from "../src/contracts.js";
 
 interface EmployeeRecord {
@@ -29,6 +30,7 @@ interface DimensionRecord {
 interface IndexRecord {
   id: string;
   key: string;
+  description?: string;
 }
 
 export interface AccessTokenBundle {
@@ -37,6 +39,33 @@ export interface AccessTokenBundle {
   knowledgeToken: string;
   pulseToken: string;
   expiresAt: string;
+}
+
+export function validateFeedbackSelection(
+  draft: FeedbackDraft,
+  taxonomy: FeedbackTaxonomy
+): {
+  index: FeedbackTaxonomy["indexes"][number];
+  dimension: FeedbackDimension;
+  subDimension: FeedbackDimension;
+} {
+  const index = taxonomy.indexes.find((item) => item.id === draft.indexId);
+  const dimension = taxonomy.dimensions.find((item) =>
+    item.id === draft.dimensionId &&
+    item.indexId === draft.indexId &&
+    !item.parentId
+  );
+  const subDimension = taxonomy.dimensions.find((item) =>
+    item.id === draft.subDimensionId &&
+    item.indexId === draft.indexId &&
+    item.parentId === draft.dimensionId
+  );
+  if (!index || !dimension || !subDimension) {
+    throw new Error(
+      "Seleção de índice, dimensão ou subdimensão inválida. Escolha novamente."
+    );
+  }
+  return { index, dimension, subDimension };
 }
 
 export class ApiError extends Error {
@@ -189,41 +218,69 @@ export class SintoniaClient {
       .sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
   }
 
-  async listFeedbackDimensions(token: string, companyId: string): Promise<FeedbackDimension[]> {
+  async listFeedbackTaxonomy(token: string, companyId: string): Promise<FeedbackTaxonomy> {
     const [dimensions, indexes] = await Promise.all([
       this.listPages<DimensionRecord>(token, "/v1/dimensions/list", companyId, "dimensions"),
       this.listPages<IndexRecord>(token, "/v1/indexes/list", companyId, "indexes")
     ]);
-    const indexById = new Map(indexes.map((index) => [index.id, index.key]));
-    return dimensions
-      .filter((dimension) => Boolean(dimension.parentId))
+    const supportedIndexes = indexes
+      .map((index) => ({
+        id: index.id,
+        key: index.key.trim().toUpperCase(),
+        description: index.description?.trim() ?? ""
+      }))
+      .filter((index) => index.key === "IPT" || index.key === "IAT")
+      .sort((a, b) => ["IPT", "IAT"].indexOf(a.key) - ["IPT", "IAT"].indexOf(b.key));
+    const indexById = new Map(supportedIndexes.map((index) => [index.id, index.key]));
+    const feedbackDimensions = dimensions
+      .filter((dimension) => indexById.has(dimension.indexId))
       .map((dimension) => ({
         ...dimension,
         indexKey: indexById.get(dimension.indexId) ?? ""
       }))
-      .filter((dimension) => dimension.indexKey === "IPT" || dimension.indexKey === "IAT")
-      .sort((a, b) => a.indexKey.localeCompare(b.indexKey) || a.name.localeCompare(b.name, "pt-BR"));
+      .sort((a, b) =>
+        a.indexKey.localeCompare(b.indexKey) ||
+        Number(Boolean(a.parentId)) - Number(Boolean(b.parentId)) ||
+        a.name.localeCompare(b.name, "pt-BR")
+      );
+    return { indexes: supportedIndexes, dimensions: feedbackDimensions };
   }
 
   async sendFeedback(
-    token: string,
+    tokens: AccessTokenBundle,
     profile: EmployeeProfile,
-    draft: FeedbackDraft,
-    dimension: FeedbackDimension
+    draft: FeedbackDraft
   ): Promise<void> {
-    await this.request<{ status: string; id: string }>("/v1/pulse/feedbacks", token, {
-      method: "POST",
-      body: JSON.stringify({
-        company_id: profile.companyId,
-        from_employee_id: profile.id,
-        to_employee_id: draft.toEmployeeId,
-        dimension_id: dimension.parentId,
-        sub_dimension_id: dimension.id,
-        index_id: dimension.indexId,
-        value: String(draft.importance),
-        text: draft.message.trim(),
-        submitted_at: new Date().toISOString()
-      })
-    });
+    try {
+      await this.request<{ status: string; id: string }>(
+        "/v1/pulse/feedbacks",
+        tokens.pulseToken,
+        {
+          method: "POST",
+          headers: {
+            "X-PulseTray-Employee-Token": tokens.employeeToken,
+            "X-PulseTray-Knowledge-Token": tokens.knowledgeToken
+          },
+          body: JSON.stringify({
+            company_id: profile.companyId,
+            from_employee_id: profile.id,
+            to_employee_id: draft.toEmployeeId,
+            dimension_id: draft.dimensionId,
+            sub_dimension_id: draft.subDimensionId,
+            index_id: draft.indexId,
+            value: String(draft.importance),
+            text: draft.message.trim(),
+            submitted_at: new Date().toISOString()
+          })
+        }
+      );
+    } catch (error) {
+      if (error instanceof ApiError && error.message === "invalid feedback target") {
+        throw new Error(
+          "O colaborador selecionado não pôde ser validado. Atualize a lista e tente novamente."
+        );
+      }
+      throw error;
+    }
   }
 }

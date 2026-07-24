@@ -1,12 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
 import type {
   EmployeeOption,
-  FeedbackDimension,
-  FeedbackDraft
+  FeedbackDraft,
+  FeedbackTaxonomy
 } from "./contracts";
 
 const emptyDraft: FeedbackDraft = {
   toEmployeeId: "",
+  indexId: "",
+  dimensionId: "",
   subDimensionId: "",
   importance: 3,
   message: ""
@@ -23,14 +25,17 @@ function ErrorNotice({ message }: { message: string }): JSX.Element {
 
 export default function FeedbackView(): JSX.Element {
   const [employees, setEmployees] = useState<EmployeeOption[]>([]);
-  const [dimensions, setDimensions] = useState<FeedbackDimension[]>([]);
+  const [taxonomy, setTaxonomy] = useState<FeedbackTaxonomy>({
+    indexes: [],
+    dimensions: []
+  });
   const [query, setQuery] = useState("");
   const [draft, setDraft] = useState<FeedbackDraft>(emptyDraft);
   const [directoryLoading, setDirectoryLoading] = useState(true);
-  const [dimensionsLoading, setDimensionsLoading] = useState(false);
-  const [dimensionsLoaded, setDimensionsLoaded] = useState(false);
+  const [taxonomyLoading, setTaxonomyLoading] = useState(false);
+  const [taxonomyLoaded, setTaxonomyLoaded] = useState(false);
   const [directoryError, setDirectoryError] = useState("");
-  const [dimensionError, setDimensionError] = useState("");
+  const [taxonomyError, setTaxonomyError] = useState("");
   const [submitError, setSubmitError] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -48,16 +53,16 @@ export default function FeedbackView(): JSX.Element {
     }
   }
 
-  async function loadDimensions(): Promise<void> {
-    setDimensionsLoading(true);
-    setDimensionError("");
+  async function loadTaxonomy(): Promise<void> {
+    setTaxonomyLoading(true);
+    setTaxonomyError("");
     try {
-      setDimensions(await window.pulseTray.listFeedbackDimensions());
-      setDimensionsLoaded(true);
+      setTaxonomy(await window.pulseTray.listFeedbackTaxonomy());
+      setTaxonomyLoaded(true);
     } catch (reason) {
-      setDimensionError(messageOf(reason));
+      setTaxonomyError(messageOf(reason));
     } finally {
-      setDimensionsLoading(false);
+      setTaxonomyLoading(false);
     }
   }
 
@@ -76,13 +81,19 @@ export default function FeedbackView(): JSX.Element {
   }, [employees, query]);
 
   const selectedEmployee = employees.find((employee) => employee.id === draft.toEmployeeId);
+  const dimensions = taxonomy.dimensions.filter((dimension) =>
+    dimension.indexId === draft.indexId && !dimension.parentId
+  );
+  const subDimensions = taxonomy.dimensions.filter((dimension) =>
+    dimension.indexId === draft.indexId && dimension.parentId === draft.dimensionId
+  );
 
   function selectEmployee(employee: EmployeeOption): void {
     setDraft({ ...emptyDraft, toEmployeeId: employee.id });
     setQuery(employee.name);
     setSearchOpen(false);
     setSubmitError("");
-    if (!dimensionsLoaded) void loadDimensions();
+    if (!taxonomyLoaded) void loadTaxonomy();
   }
 
   function clearEmployee(): void {
@@ -187,76 +198,124 @@ export default function FeedbackView(): JSX.Element {
               <button type="button" className="text-button" onClick={clearEmployee}>Trocar</button>
             </section>
 
-            {dimensionsLoading && <small className="field-status" role="status">Carregando subdimensões…</small>}
-            {dimensionError && (
+            {taxonomyLoading && (
+              <small className="field-status" role="status">
+                Carregando índices e dimensões…
+              </small>
+            )}
+            {taxonomyError && (
               <div className="field-recovery">
-                <ErrorNotice message={dimensionError} />
-                <button type="button" className="secondary" onClick={() => void loadDimensions()}>
-                  Tentar carregar subdimensões novamente
+                <ErrorNotice message={taxonomyError} />
+                <button type="button" className="secondary" onClick={() => void loadTaxonomy()}>
+                  Tentar carregar opções novamente
                 </button>
               </div>
             )}
 
-            {dimensionsLoaded && !dimensionsLoading && !dimensionError && (
+            {taxonomyLoaded && !taxonomyLoading && !taxonomyError && (
               <>
                 <div className="field">
-                  <label htmlFor="dimension">Subdimensão de IPT ou IAT</label>
+                  <label htmlFor="feedback-index">Índice</label>
                   <select
-                    id="dimension"
-                    value={draft.subDimensionId}
-                    onChange={(event) => setDraft({ ...draft, subDimensionId: event.target.value })}
+                    id="feedback-index"
+                    value={draft.indexId}
+                    onChange={(event) => setDraft({
+                      ...draft,
+                      indexId: event.target.value,
+                      dimensionId: "",
+                      subDimensionId: ""
+                    })}
                     required
                   >
-                    <option value="">Selecione uma subdimensão</option>
-                    {["IPT", "IAT"].map((index) => (
-                      <optgroup label={index} key={index}>
-                        {dimensions.filter((dimension) => dimension.indexKey === index).map((dimension) => (
-                          <option value={dimension.id} key={dimension.id}>{dimension.name}</option>
-                        ))}
-                      </optgroup>
+                    <option value="">Selecione um índice</option>
+                    {taxonomy.indexes.map((index) => (
+                      <option value={index.id} key={index.id}>{index.key}</option>
                     ))}
                   </select>
                 </div>
-                <fieldset className="importance">
-                  <legend>Importância</legend>
-                  <div>
-                    {[1, 2, 3, 4, 5].map((value) => (
-                      <button
-                        type="button"
-                        aria-label={`Importância ${value} de 5`}
-                        aria-pressed={draft.importance === value}
-                        className={draft.importance === value ? "selected" : ""}
-                        onClick={() => setDraft({ ...draft, importance: value })}
-                        key={value}
-                      >
-                        {value}
-                      </button>
-                    ))}
+                {draft.indexId && (
+                  <div className="field">
+                    <label htmlFor="feedback-dimension">Dimensão</label>
+                    <select
+                      id="feedback-dimension"
+                      value={draft.dimensionId}
+                      onChange={(event) => setDraft({
+                        ...draft,
+                        dimensionId: event.target.value,
+                        subDimensionId: ""
+                      })}
+                      required
+                    >
+                      <option value="">Selecione uma dimensão</option>
+                      {dimensions.map((dimension) => (
+                        <option value={dimension.id} key={dimension.id}>{dimension.name}</option>
+                      ))}
+                    </select>
                   </div>
-                  <small>1 = menor importância · 5 = maior importância</small>
-                </fieldset>
-                <div className="field">
-                  <div className="label-row">
-                    <label htmlFor="message">Mensagem</label>
-                    <span>{draft.message.length}/400</span>
+                )}
+                {draft.dimensionId && (
+                  <div className="field">
+                    <label htmlFor="feedback-subdimension">Subdimensão</label>
+                    <select
+                      id="feedback-subdimension"
+                      value={draft.subDimensionId}
+                      onChange={(event) => setDraft({
+                        ...draft,
+                        subDimensionId: event.target.value
+                      })}
+                      required
+                    >
+                      <option value="">Selecione uma subdimensão</option>
+                      {subDimensions.map((dimension) => (
+                        <option value={dimension.id} key={dimension.id}>{dimension.name}</option>
+                      ))}
+                    </select>
                   </div>
-                  <textarea
-                    id="message"
-                    value={draft.message}
-                    onChange={(event) => setDraft({ ...draft, message: event.target.value })}
-                    maxLength={400}
-                    rows={5}
-                    placeholder="Escreva uma mensagem clara e respeitosa."
-                    required
-                  />
-                </div>
-                {submitError && <ErrorNotice message={submitError} />}
-                <button
-                  className="primary"
-                  disabled={busy || !draft.subDimensionId || !draft.message.trim()}
-                >
-                  {busy ? "Enviando…" : "Enviar feedback"}
-                </button>
+                )}
+                {draft.subDimensionId && (
+                  <>
+                    <fieldset className="importance">
+                      <legend>Importância</legend>
+                      <div>
+                        {[1, 2, 3, 4, 5].map((value) => (
+                          <button
+                            type="button"
+                            aria-label={`Importância ${value} de 5`}
+                            aria-pressed={draft.importance === value}
+                            className={draft.importance === value ? "selected" : ""}
+                            onClick={() => setDraft({ ...draft, importance: value })}
+                            key={value}
+                          >
+                            {value}
+                          </button>
+                        ))}
+                      </div>
+                      <small>1 = menor importância · 5 = maior importância</small>
+                    </fieldset>
+                    <div className="field">
+                      <div className="label-row">
+                        <label htmlFor="message">Mensagem</label>
+                        <span>{draft.message.length}/400</span>
+                      </div>
+                      <textarea
+                        id="message"
+                        value={draft.message}
+                        onChange={(event) => setDraft({ ...draft, message: event.target.value })}
+                        maxLength={400}
+                        rows={5}
+                        placeholder="Escreva uma mensagem clara e respeitosa."
+                        required
+                      />
+                    </div>
+                    {submitError && <ErrorNotice message={submitError} />}
+                    <button
+                      className="primary"
+                      disabled={busy || !draft.subDimensionId || !draft.message.trim()}
+                    >
+                      {busy ? "Enviando…" : "Enviar feedback"}
+                    </button>
+                  </>
+                )}
               </>
             )}
           </>

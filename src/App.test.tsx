@@ -24,6 +24,31 @@ const linkedSession: SessionView = {
   receivedFeedbackAvailable: false
 };
 
+const feedbackTaxonomy = {
+  indexes: [
+    { id: "ipt", key: "IPT", description: "Índice de Potencial de Transformação" },
+    { id: "iat", key: "IAT", description: "Índice de Ambiente de Trabalho" }
+  ],
+  dimensions: [
+    { id: "dimension-ipt", indexId: "ipt", indexKey: "IPT", name: "Potencial" },
+    {
+      id: "sub-ipt",
+      indexId: "ipt",
+      indexKey: "IPT",
+      parentId: "dimension-ipt",
+      name: "Aprendizado"
+    },
+    { id: "dimension-iat", indexId: "iat", indexKey: "IAT", name: "Confiança" },
+    {
+      id: "sub-iat",
+      indexId: "iat",
+      indexKey: "IAT",
+      parentId: "dimension-iat",
+      name: "Segurança psicológica"
+    }
+  ]
+};
+
 function api(overrides: Partial<PulseTrayApi> = {}): PulseTrayApi {
   return {
     bootstrap: vi.fn().mockResolvedValue(linkedSession),
@@ -35,7 +60,7 @@ function api(overrides: Partial<PulseTrayApi> = {}): PulseTrayApi {
     getQuestion: vi.fn().mockResolvedValue(null),
     submitAnswer: vi.fn().mockResolvedValue({ ...linkedSession, lastAnswerDate: "2026-07-23" }),
     listEmployees: vi.fn().mockResolvedValue([]),
-    listFeedbackDimensions: vi.fn().mockResolvedValue([]),
+    listFeedbackTaxonomy: vi.fn().mockResolvedValue({ indexes: [], dimensions: [] }),
     sendFeedback: vi.fn().mockResolvedValue(undefined),
     listReceivedFeedback: vi.fn().mockResolvedValue({ available: false, feedbacks: [] }),
     logout: vi.fn().mockResolvedValue({ linked: false, configured: false, events: [], receivedFeedbackAvailable: false }),
@@ -272,29 +297,45 @@ describe("PulseTray app", () => {
     expect(await screen.findByText("Enviar feedback para alguém")).toBeInTheDocument();
   });
 
-  it("lists existing employees first and reveals feedback fields only after selection", async () => {
+  it("requires employee, index, dimension and subdimension in that order", async () => {
     const bridge = api({
       listEmployees: vi.fn().mockResolvedValue([
         { id: "employee-2", name: "Bruno Lima", email: "bruno@example.com", position: "Engenheiro" }
       ]),
-      listFeedbackDimensions: vi.fn().mockResolvedValue([
-        { id: "sub-1", indexId: "ipt", indexKey: "IPT", parentId: "parent-1", name: "Aprendizado" }
-      ])
+      listFeedbackTaxonomy: vi.fn().mockResolvedValue(feedbackTaxonomy)
     });
     window.pulseTray = bridge;
     render(<App />);
 
     const search = await screen.findByLabelText("Nome ou e-mail do colaborador");
-    expect(screen.queryByLabelText("Subdimensão de IPT ou IAT")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Índice")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Mensagem")).not.toBeInTheDocument();
-    expect(bridge.listFeedbackDimensions).not.toHaveBeenCalled();
+    expect(bridge.listFeedbackTaxonomy).not.toHaveBeenCalled();
 
     await userEvent.click(search);
     await userEvent.click(await screen.findByRole("button", { name: /Bruno Lima/ }));
 
-    expect(await screen.findByLabelText("Subdimensão de IPT ou IAT")).toBeInTheDocument();
-    expect(screen.getByLabelText("Mensagem")).toBeInTheDocument();
-    expect(bridge.listFeedbackDimensions).toHaveBeenCalledOnce();
+    expect(await screen.findByLabelText("Índice")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Dimensão")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Subdimensão")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Mensagem")).not.toBeInTheDocument();
+    expect(bridge.listFeedbackTaxonomy).toHaveBeenCalledOnce();
+
+    await userEvent.selectOptions(screen.getByLabelText("Índice"), "ipt");
+    expect(await screen.findByLabelText("Dimensão")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Subdimensão")).not.toBeInTheDocument();
+
+    await userEvent.selectOptions(screen.getByLabelText("Dimensão"), "dimension-ipt");
+    expect(await screen.findByLabelText("Subdimensão")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Mensagem")).not.toBeInTheDocument();
+
+    await userEvent.selectOptions(screen.getByLabelText("Subdimensão"), "sub-ipt");
+    expect(await screen.findByLabelText("Mensagem")).toBeInTheDocument();
+
+    await userEvent.selectOptions(screen.getByLabelText("Índice"), "iat");
+    expect(screen.getByLabelText("Dimensão")).toHaveValue("");
+    expect(screen.queryByLabelText("Subdimensão")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Mensagem")).not.toBeInTheDocument();
   });
 
   it("keeps employee directory and dimension failures independent and retryable", async () => {
@@ -303,12 +344,10 @@ describe("PulseTray app", () => {
       .mockResolvedValueOnce([
         { id: "employee-2", name: "Bruno Lima", email: "bruno@example.com", position: "Engenheiro" }
       ]);
-    const listFeedbackDimensions = vi.fn()
+    const listFeedbackTaxonomy = vi.fn()
       .mockRejectedValueOnce(new Error("Subdimensões indisponíveis"))
-      .mockResolvedValueOnce([
-        { id: "sub-1", indexId: "ipt", indexKey: "IPT", parentId: "parent-1", name: "Aprendizado" }
-      ]);
-    window.pulseTray = api({ listEmployees, listFeedbackDimensions });
+      .mockResolvedValueOnce(feedbackTaxonomy);
+    window.pulseTray = api({ listEmployees, listFeedbackTaxonomy });
     render(<App />);
 
     expect(await screen.findByRole("alert")).toHaveTextContent("Diretório indisponível");
@@ -319,8 +358,8 @@ describe("PulseTray app", () => {
 
     expect(await screen.findByRole("alert")).toHaveTextContent("Subdimensões indisponíveis");
     expect(screen.getByText("Bruno Lima")).toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: "Tentar carregar subdimensões novamente" }));
-    expect(await screen.findByLabelText("Subdimensão de IPT ou IAT")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Tentar carregar opções novamente" }));
+    expect(await screen.findByLabelText("Índice")).toBeInTheDocument();
   });
 
   it("preserves feedback data on failure and shows the visible 400 character counter", async () => {
@@ -328,9 +367,7 @@ describe("PulseTray app", () => {
       listEmployees: vi.fn().mockResolvedValue([
         { id: "employee-2", name: "Bruno Lima", email: "bruno@example.com", position: "Engenheiro" }
       ]),
-      listFeedbackDimensions: vi.fn().mockResolvedValue([
-        { id: "sub-1", indexId: "ipt", indexKey: "IPT", parentId: "parent-1", name: "Aprendizado" }
-      ]),
+      listFeedbackTaxonomy: vi.fn().mockResolvedValue(feedbackTaxonomy),
       sendFeedback: vi.fn().mockRejectedValue(new Error("Falha temporária"))
     });
     window.pulseTray = bridge;
@@ -338,7 +375,9 @@ describe("PulseTray app", () => {
     const search = await screen.findByLabelText("Nome ou e-mail do colaborador");
     await userEvent.type(search, "bruno@example.com");
     await userEvent.click(await screen.findByRole("button", { name: /Bruno Lima/ }));
-    await userEvent.selectOptions(screen.getByLabelText("Subdimensão de IPT ou IAT"), "sub-1");
+    await userEvent.selectOptions(screen.getByLabelText("Índice"), "ipt");
+    await userEvent.selectOptions(screen.getByLabelText("Dimensão"), "dimension-ipt");
+    await userEvent.selectOptions(screen.getByLabelText("Subdimensão"), "sub-ipt");
     await userEvent.clear(screen.getByLabelText("Mensagem"));
     await userEvent.type(screen.getByLabelText("Mensagem"), "Ótima colaboração.");
     expect(screen.getByText("18/400")).toBeInTheDocument();
@@ -354,16 +393,16 @@ describe("PulseTray app", () => {
       listEmployees: vi.fn().mockResolvedValue([
         { id: "employee-2", name: "Bruno Lima", email: "bruno@example.com", position: "Engenheiro" }
       ]),
-      listFeedbackDimensions: vi.fn().mockResolvedValue([
-        { id: "sub-1", indexId: "iat", indexKey: "IAT", parentId: "parent-1", name: "Confiança" }
-      ]),
+      listFeedbackTaxonomy: vi.fn().mockResolvedValue(feedbackTaxonomy),
       sendFeedback
     });
     window.pulseTray = bridge;
     render(<App />);
     await userEvent.type(await screen.findByLabelText("Nome ou e-mail do colaborador"), "Bruno");
     await userEvent.click(await screen.findByRole("button", { name: /Bruno Lima/ }));
-    await userEvent.selectOptions(screen.getByLabelText("Subdimensão de IPT ou IAT"), "sub-1");
+    await userEvent.selectOptions(screen.getByLabelText("Índice"), "iat");
+    await userEvent.selectOptions(screen.getByLabelText("Dimensão"), "dimension-iat");
+    await userEvent.selectOptions(screen.getByLabelText("Subdimensão"), "sub-iat");
     await userEvent.type(screen.getByLabelText("Mensagem"), "Obrigado!");
     const submit = screen.getByRole("button", { name: "Enviar feedback" });
     await userEvent.click(submit);
