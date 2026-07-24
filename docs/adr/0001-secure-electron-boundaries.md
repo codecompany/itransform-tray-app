@@ -25,6 +25,15 @@ Electron no pacote.
   access tokens.
 - Toda integração usa APIs oficiais. Contratos ausentes permanecem indisponíveis
   de forma explícita.
+- A pergunta diária não faz parte da navegação persistente. Quando o agendador
+  encontra uma pergunta disponível, o processo principal abre uma janela em
+  tela cheia, não minimizável e não fechável até a API aceitar a resposta. O
+  menu do tray mantém um acesso manual à mesma experiência.
+- O diretório de colaboradores é consultado antes das dimensões. O renderer só
+  revela os demais campos de feedback depois da seleção de um nome ou e-mail
+  retornado pela API oficial, e as duas consultas têm recuperação independente.
+- Lembretes e confirmações são enviados pelo sistema operacional. O conteúdo
+  nativo é genérico e não contém token, nome, e-mail ou mensagem de feedback.
 - O pacote npm baixa o artefato portátil da mesma versão, valida o SHA-256 e
   instala por troca atômica.
 
@@ -48,6 +57,10 @@ checksum, staging e substituição atômica.
 - APIs e credenciais ficam fora do contexto DOM.
 - A vinculação não depende de e-mail ou Employee ID dentro do JWT de Employee.
 - A janela obrigatória continua ativa após tentativas de fechamento.
+- A janela obrigatória volta ao modo de tela cheia após uma tentativa de saída e
+  só restaura o modo normal depois de uma resposta aceita.
+- O histórico interno não é apresentado como uma central de notificações; o
+  usuário recebe os avisos pelo mecanismo nativo do sistema.
 - Novas operações precisam de canal IPC explícito e validação no processo
   principal.
 - Feedbacks recebidos só podem ser liberados quando houver uma rota oficial
@@ -57,4 +70,4 @@ checksum, staging e substituição atômica.
 
 1. Manter o teste de contrato entre a resposta de sessão e a vinculação pelo
    Employee ID.
-2. Disponibilizar a rota oficial de feedbacks recebidos/notificações.
+2. Disponibilizar a rota oficial de feedbacks recebidos.

@@ -18,7 +18,14 @@ export default defineConfig({
     coverage: {
       provider: "v8",
       reporter: ["text", "json-summary"],
-      include: ["src/App.tsx", "electron/scheduler.ts", "electron/sintonia.ts"],
+      include: [
+        "src/App.tsx",
+        "src/FeedbackView.tsx",
+        "electron/notifications.ts",
+        "electron/scheduler.ts",
+        "electron/sintonia.ts",
+        "electron/window-mode.ts"
+      ],
       exclude: ["src/main.tsx", "src/global.d.ts", "src/preview.ts"],
       thresholds: {
         statements: 90,

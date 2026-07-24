@@ -1,6 +1,6 @@
 {
   "name": "@code-company/pulsetray",
-  "version": "0.1.6",
+  "version": "0.1.7",
   "description": "Portable PulseTray installer and launcher",
   "license": "UNLICENSED",
   "homepage": "https://github.com/codecompany/itransform-tray-app#readme",

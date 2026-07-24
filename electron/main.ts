@@ -24,6 +24,11 @@ import type {
 } from "../src/contracts.js";
 import { DailyScheduler, localDate } from "./scheduler.js";
 import { ApiError, SintoniaClient, type AccessTokenBundle } from "./sintonia.js";
+import {
+  notificationFor,
+  type NativeNotificationKind
+} from "./notifications.js";
+import { applyQuestionWindowMode } from "./window-mode.js";
 
 interface LocalSession {
   tokenCipher?: string;
@@ -211,9 +216,7 @@ function stringValue(value: unknown, field: string, max = 8_192): string {
 function setQuestionRequired(required: boolean): void {
   questionRequired = required;
   if (!mainWindow || mainWindow.isDestroyed()) return;
-  mainWindow.setClosable(!required);
-  mainWindow.setAlwaysOnTop(required, required ? "floating" : "normal");
-  if (process.platform === "darwin") mainWindow.setVisibleOnAllWorkspaces(required);
+  applyQuestionWindowMode(mainWindow, required);
 }
 
 function sendNavigation(view: AppView, required = false): void {
@@ -223,12 +226,21 @@ function sendNavigation(view: AppView, required = false): void {
   else send();
 }
 
-function showWindow(view: AppView = "question", required = false): void {
+function showWindow(view: AppView = "feedback", required = false): void {
   if (!mainWindow) return;
   if (required) setQuestionRequired(true);
+  const targetView = required || questionRequired ? "question" : view;
   mainWindow.show();
   mainWindow.focus();
-  sendNavigation(view, required || questionRequired);
+  sendNavigation(targetView, required || questionRequired);
+}
+
+function showNativeNotification(kind: NativeNotificationKind, detail?: string): void {
+  if (!Notification.isSupported()) return;
+  const policy = notificationFor(kind, detail);
+  const notification = new Notification({ title: "PulseTray", body: policy.body });
+  notification.on("click", () => showWindow(policy.view, policy.required));
+  notification.show();
 }
 
 async function checkDailyQuestion(): Promise<void> {
@@ -243,12 +255,17 @@ async function checkDailyQuestion(): Promise<void> {
     if (!result || store.snapshot().lastAnswerDate === result.date) return;
     currentQuestion = { ...result, answered: false };
     await store.addEvent("system", "Pergunta diária disponível", "A pergunta de hoje aguarda sua resposta.");
-    if (Notification.isSupported()) {
-      new Notification({ title: "PulseTray", body: "Sua pergunta diária está pronta." }).show();
-    }
+    showNativeNotification("daily-question");
     showWindow("question", true);
   } catch (error) {
-    if (error instanceof ApiError && error.status === 401) await logout();
+    if (error instanceof ApiError && error.status === 401) {
+      await logout();
+      return;
+    }
+    console.warn(JSON.stringify({
+      event: "daily_question_check_failed",
+      status: error instanceof ApiError ? error.status : undefined
+    }));
   }
 }
 
@@ -294,6 +311,14 @@ function createWindow(): BrowserWindow {
       window.hide();
     }
   });
+  window.on("minimize", () => {
+    if (!questionRequired) return;
+    window.restore();
+    window.focus();
+  });
+  window.on("leave-full-screen", () => {
+    if (questionRequired) window.setFullScreen(true);
+  });
   const devUrl = process.env.VITE_DEV_SERVER_URL;
   if (devUrl) void window.loadURL(devUrl);
   else void window.loadFile(path.join(app.getAppPath(), "dist", "renderer", "index.html"));
@@ -308,7 +333,6 @@ function createTray(): Tray {
     { label: "Questão diária", click: () => showWindow("question") },
     { label: "Enviar feedback", click: () => showWindow("feedback") },
     { label: "Feedbacks recebidos", click: () => showWindow("received") },
-    { label: "Notificações", click: () => showWindow("notifications") },
     { type: "separator" },
     { label: "Configurações", click: () => showWindow("settings") },
     { type: "separator" },
@@ -320,7 +344,7 @@ function createTray(): Tray {
       }
     }
   ]));
-  appTray.on("click", () => showWindow("question"));
+  appTray.on("click", () => showWindow("feedback"));
   return appTray;
 }
 
@@ -357,6 +381,7 @@ function registerIpc(): void {
     const tokens = await client.exchangeTrayToken(token);
     const profile = await client.link(tokens.employeeToken, tokens.employeeId);
     await store.link(token, tokens, profile);
+    showNativeNotification("linked");
     return sessionView();
   });
   ipcMain.handle("session:daily-time", async (event, rawTime: unknown) => {
@@ -366,6 +391,7 @@ function registerIpc(): void {
     if (!/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(time)) throw new Error("Horário inválido.");
     await store.setDailyTime(time);
     scheduler.start();
+    showNativeNotification("schedule-updated", time);
     return sessionView();
   });
   ipcMain.handle("session:logout", async (event) => {
@@ -425,9 +451,10 @@ function registerIpc(): void {
   ipcMain.handle("feedback:employees", async (event) => {
     trusted(event);
     const profile = requireProfile();
-    return withAccessTokens((tokens) =>
+    const employees = await withAccessTokens((tokens) =>
       client.listEmployees(tokens.employeeToken, profile.companyId)
     );
+    return employees.filter((employee) => employee.id !== profile.id);
   });
   ipcMain.handle("feedback:dimensions", async (event) => {
     trusted(event);
@@ -469,6 +496,7 @@ function registerIpc(): void {
         `Feedback enviado para ${recipient.name}`,
         `${dimension.indexKey} · ${dimension.name} · importância ${draft.importance}`
       );
+      showNativeNotification("feedback-sent");
     } finally {
       feedbackInFlight = false;
     }
@@ -487,7 +515,7 @@ const hasLock = app.requestSingleInstanceLock();
 if (!hasLock) {
   app.quit();
 } else {
-  app.on("second-instance", () => showWindow("question", questionRequired));
+  app.on("second-instance", () => showWindow(questionRequired ? "question" : "feedback", questionRequired));
   app.on("window-all-closed", () => undefined);
   app.on("before-quit", () => {
     quitting = true;
@@ -520,7 +548,7 @@ if (!hasLock) {
     powerMonitor.on("resume", () => void scheduler.check());
     if (store.snapshot().dailyTime) scheduler.start();
     if (!process.argv.includes("--hidden") || !store.snapshot().profile) {
-      mainWindow.once("ready-to-show", () => showWindow("question"));
+      mainWindow.once("ready-to-show", () => showWindow("feedback"));
     }
   });
 }

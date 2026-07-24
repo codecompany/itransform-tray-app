@@ -2,7 +2,6 @@ export type AppView =
   | "question"
   | "feedback"
   | "received"
-  | "notifications"
   | "settings";
 
 export type EventKind = "system" | "feedback-sent" | "feedback-received";

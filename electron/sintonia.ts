@@ -164,9 +164,22 @@ export class SintoniaClient {
   }
 
   async listEmployees(token: string, companyId: string): Promise<EmployeeOption[]> {
-    const employees = await this.listPages<EmployeeRecord>(token, "/v1/employees/list", companyId, "employees");
+    const normalizedCompanyId = companyId.trim();
+    if (!normalizedCompanyId) {
+      throw new ApiError(
+        "A sessão não contém a empresa necessária para listar colaboradores.",
+        400,
+        "COMPANY_ID_MISSING"
+      );
+    }
+    const employees = await this.listPages<EmployeeRecord>(
+      token,
+      "/v1/employees/list",
+      normalizedCompanyId,
+      "employees"
+    );
     return employees
-      .filter((employee) => !employee.status || employee.status === "active")
+      .filter((employee) => !employee.status || employee.status.trim().toLowerCase() === "active")
       .map((employee) => ({
         id: employee.id,
         name: employeeName(employee),

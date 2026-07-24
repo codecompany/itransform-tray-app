@@ -135,7 +135,7 @@ describe("PulseTray app", () => {
     await userEvent.type(time, "10:30");
     await userEvent.click(screen.getByRole("button", { name: "Começar" }));
     expect(bridge.saveDailyTime).toHaveBeenCalledWith("10:30");
-    expect(await screen.findByText("Questão diária")).toBeInTheDocument();
+    expect(await screen.findByText("Enviar feedback para alguém")).toBeInTheDocument();
   });
 
   it("reports a schedule save failure without leaving setup", async () => {
@@ -149,7 +149,7 @@ describe("PulseTray app", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent("Horário recusado");
   });
 
-  it("renders API choices and blocks navigation during a required question", async () => {
+  it("keeps the daily question out of navigation and opens it only on an Electron event", async () => {
     let navigate: ((view: "question", required: boolean) => void) | undefined;
     const bridge = api({
       onNavigate: vi.fn((callback) => {
@@ -172,10 +172,15 @@ describe("PulseTray app", () => {
     });
     window.pulseTray = bridge;
     render(<App />);
-    await screen.findByText("Tenho espaço para aprender com erros?");
+    expect(await screen.findByText("Enviar feedback para alguém")).toBeInTheDocument();
+    expect(bridge.getQuestion).not.toHaveBeenCalled();
+    expect(screen.queryByRole("button", { name: "Questão" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Avisos" })).not.toBeInTheDocument();
+
     navigate?.("question", true);
+    expect(await screen.findByText("Tenho espaço para aprender com erros?")).toBeInTheDocument();
     expect(await screen.findByText("Resposta necessária")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Feedback/ })).toBeDisabled();
+    expect(screen.queryByRole("navigation")).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole("radio", { name: /Concordo totalmente/ }));
     await userEvent.click(screen.getByRole("button", { name: "Enviar resposta" }));
     expect(bridge.submitAnswer).toHaveBeenCalledWith({
@@ -187,20 +192,42 @@ describe("PulseTray app", () => {
   });
 
   it("shows the empty state for the daily question", async () => {
-    const bridge = api();
+    let navigate: ((view: "question", required: boolean) => void) | undefined;
+    const bridge = api({
+      onNavigate: vi.fn((callback) => {
+        navigate = callback;
+        return () => undefined;
+      })
+    });
     window.pulseTray = bridge;
     render(<App />);
+    await screen.findByText("Enviar feedback para alguém");
+    navigate?.("question", false);
     expect(await screen.findByText("Nada por enquanto")).toBeInTheDocument();
   });
 
   it("shows an error when the daily question cannot be loaded", async () => {
-    window.pulseTray = api({ getQuestion: vi.fn().mockRejectedValue(new Error("Serviço indisponível")) });
+    let navigate: ((view: "question", required: boolean) => void) | undefined;
+    window.pulseTray = api({
+      getQuestion: vi.fn().mockRejectedValue(new Error("Serviço indisponível")),
+      onNavigate: vi.fn((callback) => {
+        navigate = callback;
+        return () => undefined;
+      })
+    });
     render(<App />);
+    await screen.findByText("Enviar feedback para alguém");
+    navigate?.("question", false);
     expect(await screen.findByRole("alert")).toHaveTextContent("Serviço indisponível");
   });
 
   it("keeps the selected answer available when submission fails", async () => {
+    let navigate: ((view: "question", required: boolean) => void) | undefined;
     const bridge = api({
+      onNavigate: vi.fn((callback) => {
+        navigate = callback;
+        return () => undefined;
+      }),
       getQuestion: vi.fn().mockResolvedValue({
         employeeId: "employee-1",
         date: "2026-07-23",
@@ -215,6 +242,8 @@ describe("PulseTray app", () => {
     });
     window.pulseTray = bridge;
     render(<App />);
+    await screen.findByText("Enviar feedback para alguém");
+    navigate?.("question", true);
     const choice = await screen.findByRole("radio", { name: /Concordo parcialmente/ });
     await userEvent.click(choice);
     await userEvent.click(screen.getByRole("button", { name: "Enviar resposta" }));
@@ -223,7 +252,12 @@ describe("PulseTray app", () => {
   });
 
   it("opens feedback from the completed daily question", async () => {
+    let navigate: ((view: "question", required: boolean) => void) | undefined;
     window.pulseTray = api({
+      onNavigate: vi.fn((callback) => {
+        navigate = callback;
+        return () => undefined;
+      }),
       getQuestion: vi.fn().mockResolvedValue({
         employeeId: "employee-1",
         date: "2026-07-23",
@@ -232,8 +266,61 @@ describe("PulseTray app", () => {
       })
     });
     render(<App />);
+    await screen.findByText("Enviar feedback para alguém");
+    navigate?.("question", false);
     await userEvent.click(await screen.findByRole("button", { name: "Enviar feedback" }));
     expect(await screen.findByText("Enviar feedback para alguém")).toBeInTheDocument();
+  });
+
+  it("lists existing employees first and reveals feedback fields only after selection", async () => {
+    const bridge = api({
+      listEmployees: vi.fn().mockResolvedValue([
+        { id: "employee-2", name: "Bruno Lima", email: "bruno@example.com", position: "Engenheiro" }
+      ]),
+      listFeedbackDimensions: vi.fn().mockResolvedValue([
+        { id: "sub-1", indexId: "ipt", indexKey: "IPT", parentId: "parent-1", name: "Aprendizado" }
+      ])
+    });
+    window.pulseTray = bridge;
+    render(<App />);
+
+    const search = await screen.findByLabelText("Nome ou e-mail do colaborador");
+    expect(screen.queryByLabelText("Subdimensão de IPT ou IAT")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Mensagem")).not.toBeInTheDocument();
+    expect(bridge.listFeedbackDimensions).not.toHaveBeenCalled();
+
+    await userEvent.click(search);
+    await userEvent.click(await screen.findByRole("button", { name: /Bruno Lima/ }));
+
+    expect(await screen.findByLabelText("Subdimensão de IPT ou IAT")).toBeInTheDocument();
+    expect(screen.getByLabelText("Mensagem")).toBeInTheDocument();
+    expect(bridge.listFeedbackDimensions).toHaveBeenCalledOnce();
+  });
+
+  it("keeps employee directory and dimension failures independent and retryable", async () => {
+    const listEmployees = vi.fn()
+      .mockRejectedValueOnce(new Error("Diretório indisponível"))
+      .mockResolvedValueOnce([
+        { id: "employee-2", name: "Bruno Lima", email: "bruno@example.com", position: "Engenheiro" }
+      ]);
+    const listFeedbackDimensions = vi.fn()
+      .mockRejectedValueOnce(new Error("Subdimensões indisponíveis"))
+      .mockResolvedValueOnce([
+        { id: "sub-1", indexId: "ipt", indexKey: "IPT", parentId: "parent-1", name: "Aprendizado" }
+      ]);
+    window.pulseTray = api({ listEmployees, listFeedbackDimensions });
+    render(<App />);
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Diretório indisponível");
+    await userEvent.click(screen.getByRole("button", { name: "Tentar carregar colaboradores novamente" }));
+    const search = await screen.findByLabelText("Nome ou e-mail do colaborador");
+    await userEvent.click(search);
+    await userEvent.click(await screen.findByRole("button", { name: /Bruno Lima/ }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Subdimensões indisponíveis");
+    expect(screen.getByText("Bruno Lima")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Tentar carregar subdimensões novamente" }));
+    expect(await screen.findByLabelText("Subdimensão de IPT ou IAT")).toBeInTheDocument();
   });
 
   it("preserves feedback data on failure and shows the visible 400 character counter", async () => {
@@ -248,11 +335,9 @@ describe("PulseTray app", () => {
     });
     window.pulseTray = bridge;
     render(<App />);
-    await screen.findByText("Questão diária");
-    await userEvent.click(screen.getByRole("button", { name: /Feedback/ }));
-    await screen.findByLabelText("Colaborador");
-    await userEvent.type(screen.getByLabelText("Colaborador"), "Bruno");
-    await userEvent.click(await screen.findByText("Bruno Lima"));
+    const search = await screen.findByLabelText("Nome ou e-mail do colaborador");
+    await userEvent.type(search, "bruno@example.com");
+    await userEvent.click(await screen.findByRole("button", { name: /Bruno Lima/ }));
     await userEvent.selectOptions(screen.getByLabelText("Subdimensão de IPT ou IAT"), "sub-1");
     await userEvent.clear(screen.getByLabelText("Mensagem"));
     await userEvent.type(screen.getByLabelText("Mensagem"), "Ótima colaboração.");
@@ -276,10 +361,8 @@ describe("PulseTray app", () => {
     });
     window.pulseTray = bridge;
     render(<App />);
-    await screen.findByText("Questão diária");
-    await userEvent.click(screen.getByRole("button", { name: /Feedback/ }));
-    await userEvent.type(await screen.findByLabelText("Colaborador"), "Bruno");
-    await userEvent.click(await screen.findByText("Bruno Lima"));
+    await userEvent.type(await screen.findByLabelText("Nome ou e-mail do colaborador"), "Bruno");
+    await userEvent.click(await screen.findByRole("button", { name: /Bruno Lima/ }));
     await userEvent.selectOptions(screen.getByLabelText("Subdimensão de IPT ou IAT"), "sub-1");
     await userEvent.type(screen.getByLabelText("Mensagem"), "Obrigado!");
     const submit = screen.getByRole("button", { name: "Enviar feedback" });
@@ -289,10 +372,11 @@ describe("PulseTray app", () => {
     resolveSend?.();
     expect(await screen.findByText("Seu feedback foi enviado com sucesso!")).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Enviar outro feedback" }));
-    expect(await screen.findByLabelText("Mensagem")).toHaveValue("");
+    expect(await screen.findByLabelText("Nome ou e-mail do colaborador")).toHaveValue("");
+    expect(screen.queryByLabelText("Mensagem")).not.toBeInTheDocument();
   });
 
-  it("shows received feedback and the notification datalog", async () => {
+  it("shows received feedback without an internal notification page", async () => {
     const bridge = api({
       bootstrap: vi.fn().mockResolvedValue({
         ...linkedSession,
@@ -318,12 +402,10 @@ describe("PulseTray app", () => {
     });
     window.pulseTray = bridge;
     render(<App />);
-    await screen.findByText("Questão diária");
-    await userEvent.click(screen.getByRole("button", { name: /Recebidos/ }));
+    await userEvent.click(await screen.findByRole("button", { name: /Recebidos/ }));
     expect(await screen.findByText("Obrigado pela parceria.")).toBeInTheDocument();
     expect(screen.getByText("Bruno Lima")).toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: /Avisos/ }));
-    expect(await screen.findByText("Feedback enviado")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Avisos/ })).not.toBeInTheDocument();
   });
 
   it("shows explicit received-feedback unavailability and errors", async () => {
@@ -336,15 +418,13 @@ describe("PulseTray app", () => {
     });
     window.pulseTray = bridge;
     const rendered = render(<App />);
-    await screen.findByText("Questão diária");
-    await userEvent.click(screen.getByRole("button", { name: /Recebidos/ }));
+    await userEvent.click(await screen.findByRole("button", { name: /Recebidos/ }));
     expect(await screen.findByText("Contrato ainda indisponível.")).toBeInTheDocument();
     rendered.unmount();
 
     window.pulseTray = api({ listReceivedFeedback: vi.fn().mockRejectedValue(new Error("Falha na consulta")) });
     render(<App />);
-    await screen.findByText("Questão diária");
-    await userEvent.click(screen.getByRole("button", { name: /Recebidos/ }));
+    await userEvent.click(await screen.findByRole("button", { name: /Recebidos/ }));
     expect(await screen.findByRole("alert")).toHaveTextContent("Falha na consulta");
   });
 
@@ -352,8 +432,7 @@ describe("PulseTray app", () => {
     const bridge = api();
     window.pulseTray = bridge;
     render(<App />);
-    await screen.findByText("Questão diária");
-    await userEvent.click(screen.getByRole("button", { name: /Ajustes/ }));
+    await userEvent.click(await screen.findByRole("button", { name: /Ajustes/ }));
     const time = await screen.findByLabelText("Horário da pergunta diária");
     await userEvent.clear(time);
     await userEvent.type(time, "08:15");
@@ -370,8 +449,7 @@ describe("PulseTray app", () => {
 
     window.pulseTray = api({ saveDailyTime: vi.fn().mockRejectedValue(new Error("Falha ao salvar")) });
     render(<App />);
-    await screen.findByText("Questão diária");
-    await userEvent.click(screen.getByRole("button", { name: /Ajustes/ }));
+    await userEvent.click(await screen.findByRole("button", { name: /Ajustes/ }));
     await userEvent.click(await screen.findByRole("button", { name: "Salvar" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("Falha ao salvar");
   });
@@ -380,8 +458,7 @@ describe("PulseTray app", () => {
     const bridge = api();
     window.pulseTray = bridge;
     render(<App />);
-    await screen.findByText("Questão diária");
-    await userEvent.click(screen.getByRole("button", { name: /Ajustes/ }));
+    await userEvent.click(await screen.findByRole("button", { name: /Ajustes/ }));
     await userEvent.click(await screen.findByRole("button", { name: "Fazer logout" }));
     await waitFor(() => expect(bridge.logout).toHaveBeenCalledOnce());
     expect(await screen.findByLabelText("Token de acesso")).toBeInTheDocument();
