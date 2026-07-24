@@ -10,18 +10,15 @@ import {
   session,
   Tray
 } from "electron";
-import { promises as fs } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import type {
-  ActivityEvent,
   AppView,
-  DailyQuestion,
   EmployeeProfile,
   FeedbackDraft,
   SessionView
 } from "../src/contracts.js";
-import { DailyScheduler, localDate } from "./scheduler.js";
+import { DailyScheduler } from "./scheduler.js";
 import {
   ApiError,
   SintoniaClient,
@@ -32,17 +29,10 @@ import {
   notificationFor,
   type NativeNotificationKind
 } from "./notifications.js";
+import { DailyQuestionCoordinator } from "./daily-question-coordinator.js";
+import { shouldPromptAutomatically } from "./question-state.js";
+import { SessionStore } from "./session-store.js";
 import { applyQuestionWindowMode } from "./window-mode.js";
-
-interface LocalSession {
-  tokenCipher?: string;
-  tokensCipher?: string;
-  profile?: EmployeeProfile;
-  dailyTime?: string;
-  lastAnswerDate?: string;
-  lastAnswerQuestionId?: string;
-  events: ActivityEvent[];
-}
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const client = new SintoniaClient();
@@ -50,120 +40,19 @@ let mainWindow: BrowserWindow | undefined;
 let tray: Tray | undefined;
 let quitting = false;
 let questionRequired = false;
-let currentQuestion: DailyQuestion | null = null;
 let answerInFlight = false;
 let feedbackInFlight = false;
 let store: SessionStore;
-
-class SessionStore {
-  private state: LocalSession = { events: [] };
-  private readonly file = path.join(app.getPath("userData"), "session.json");
-
-  async load(): Promise<void> {
-    try {
-      const raw = await fs.readFile(this.file, "utf8");
-      this.state = JSON.parse(raw) as LocalSession;
-      this.state.events ??= [];
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
-        await this.clear();
-      }
-    }
-  }
-
-  snapshot(): LocalSession {
-    return this.state;
-  }
-
-  token(): string {
-    if (!this.state.tokenCipher) throw new Error("Vincule seu token antes de continuar.");
-    if (!safeStorage.isEncryptionAvailable()) {
-      throw new Error("O armazenamento seguro do sistema não está disponível.");
-    }
-    return safeStorage.decryptString(Buffer.from(this.state.tokenCipher, "base64"));
-  }
-
-  tokens(): AccessTokenBundle | undefined {
-    if (!this.state.tokensCipher) return undefined;
-    if (!safeStorage.isEncryptionAvailable()) {
-      throw new Error("O armazenamento seguro do sistema não está disponível.");
-    }
-    const raw = safeStorage.decryptString(Buffer.from(this.state.tokensCipher, "base64"));
-    return JSON.parse(raw) as AccessTokenBundle;
-  }
-
-  async link(token: string, tokens: AccessTokenBundle, profile: EmployeeProfile): Promise<void> {
-    if (!safeStorage.isEncryptionAvailable()) {
-      throw new Error("O armazenamento seguro do sistema não está disponível.");
-    }
-    this.state = {
-      tokenCipher: safeStorage.encryptString(token).toString("base64"),
-      tokensCipher: safeStorage.encryptString(JSON.stringify(tokens)).toString("base64"),
-      profile,
-      events: []
-    };
-    this.event("system", "PulseTray vinculado", `Olá, ${profile.name}. Sua conta está pronta.`);
-    await this.save();
-  }
-
-  async setTokens(tokens: AccessTokenBundle): Promise<void> {
-    if (!safeStorage.isEncryptionAvailable()) {
-      throw new Error("O armazenamento seguro do sistema não está disponível.");
-    }
-    this.state.tokensCipher = safeStorage.encryptString(JSON.stringify(tokens)).toString("base64");
-    await this.save();
-  }
-
-  async setDailyTime(time: string): Promise<void> {
-    this.state.dailyTime = time;
-    this.event("system", "Horário diário atualizado", `A pergunta diária será exibida às ${time}.`);
-    await this.save();
-  }
-
-  async markAnswered(date: string, questionId: string): Promise<void> {
-    this.state.lastAnswerDate = date;
-    this.state.lastAnswerQuestionId = questionId;
-    this.event("system", "Pergunta diária respondida", `Resposta registrada em ${date}.`);
-    await this.save();
-  }
-
-  async addEvent(kind: ActivityEvent["kind"], title: string, detail: string): Promise<void> {
-    this.event(kind, title, detail);
-    await this.save();
-  }
-
-  async clear(): Promise<void> {
-    this.state = { events: [] };
-    await fs.rm(this.file, { force: true });
-  }
-
-  private event(kind: ActivityEvent["kind"], title: string, detail: string): void {
-    this.state.events.unshift({
-      id: crypto.randomUUID(),
-      kind,
-      title,
-      detail,
-      at: new Date().toISOString()
-    });
-    this.state.events = this.state.events.slice(0, 200);
-  }
-
-  private async save(): Promise<void> {
-    await fs.mkdir(path.dirname(this.file), { recursive: true });
-    const temp = `${this.file}.tmp`;
-    await fs.writeFile(temp, JSON.stringify(this.state), { encoding: "utf8", mode: 0o600 });
-    await fs.rename(temp, this.file);
-  }
-}
+let dailyQuestions: DailyQuestionCoordinator;
 
 function sessionView(): SessionView {
   const state = store.snapshot();
+  const daily = store.daily();
   return {
     linked: Boolean(state.profile && state.tokenCipher),
-    configured: Boolean(state.profile && state.tokenCipher && state.dailyTime),
+    configured: Boolean(state.profile && state.tokenCipher),
     profile: state.profile,
-    dailyTime: state.dailyTime,
-    lastAnswerDate: state.lastAnswerDate,
+    lastAnswerDate: daily.lastAnswerDate,
     events: state.events,
     receivedFeedbackAvailable: false
   };
@@ -239,46 +128,23 @@ function showWindow(view: AppView = "feedback", required = false): void {
   sendNavigation(targetView, required || questionRequired);
 }
 
-function showNativeNotification(kind: NativeNotificationKind, detail?: string): void {
+function showNativeNotification(kind: NativeNotificationKind): void {
   if (!Notification.isSupported()) return;
-  const policy = notificationFor(kind, detail);
+  const policy = notificationFor(kind);
   const notification = new Notification({ title: "PulseTray", body: policy.body });
   notification.on("click", () => showWindow(policy.view, policy.required));
   notification.show();
 }
 
-async function checkDailyQuestion(): Promise<void> {
-  if (questionRequired) {
-    showWindow("question", true);
-    return;
-  }
-  const profile = store.snapshot().profile;
-  if (!profile) return;
-  try {
-    const result = await withAccessTokens((tokens) => client.getQuestion(tokens.pulseToken, profile.id));
-    if (!result || store.snapshot().lastAnswerDate === result.date) return;
-    currentQuestion = { ...result, answered: false };
-    await store.addEvent("system", "Pergunta diária disponível", "A pergunta de hoje aguarda sua resposta.");
-    showNativeNotification("daily-question");
-    showWindow("question", true);
-  } catch (error) {
-    if (error instanceof ApiError && error.status === 401) {
-      await logout();
-      return;
-    }
-    console.warn(JSON.stringify({
-      event: "daily_question_check_failed",
-      status: error instanceof ApiError ? error.status : undefined
-    }));
-  }
+function releaseQuestionWindow(): void {
+  if (!questionRequired) return;
+  setQuestionRequired(false);
+  sendNavigation("question", false);
 }
 
-const scheduler = new DailyScheduler(
-  () => ({
-    time: store?.snapshot().dailyTime,
-    lastAnswerDate: store?.snapshot().lastAnswerDate
-  }),
-  checkDailyQuestion
+const launchedHidden = process.argv.includes("--hidden");
+const scheduler = new DailyScheduler((now) =>
+  dailyQuestions.run(now, shouldPromptAutomatically(launchedHidden, now))
 );
 
 function iconPath(): string {
@@ -354,7 +220,7 @@ function createTray(): Tray {
 
 async function logout(): Promise<SessionView> {
   scheduler.stop();
-  currentQuestion = null;
+  dailyQuestions?.clear();
   setQuestionRequired(false);
   await store.clear();
   return sessionView();
@@ -385,17 +251,9 @@ function registerIpc(): void {
     const tokens = await client.exchangeTrayToken(token);
     const profile = await client.link(tokens.employeeToken, tokens.employeeId);
     await store.link(token, tokens, profile);
+    scheduler.start(false);
+    setImmediate(() => void dailyQuestions.run(new Date(), true));
     showNativeNotification("linked");
-    return sessionView();
-  });
-  ipcMain.handle("session:daily-time", async (event, rawTime: unknown) => {
-    trusted(event);
-    requireProfile();
-    const time = stringValue(rawTime, "Horário", 5);
-    if (!/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(time)) throw new Error("Horário inválido.");
-    await store.setDailyTime(time);
-    scheduler.start();
-    showNativeNotification("schedule-updated", time);
     return sessionView();
   });
   ipcMain.handle("session:logout", async (event) => {
@@ -404,17 +262,10 @@ function registerIpc(): void {
   });
   ipcMain.handle("question:get", async (event) => {
     trusted(event);
-    const profile = requireProfile();
-    const question = await withAccessTokens((tokens) => client.getQuestion(tokens.pulseToken, profile.id));
-    if (!question) {
-      currentQuestion = null;
-      return null;
-    }
-    currentQuestion = {
-      ...question,
-      answered: store.snapshot().lastAnswerDate === question.date
-    };
-    return currentQuestion;
+    requireProfile();
+    const cached = dailyQuestions.current();
+    await dailyQuestions.check(new Date(), false);
+    return dailyQuestions.current() ?? cached;
   });
   ipcMain.handle("question:answer", async (event, raw: unknown) => {
     trusted(event);
@@ -423,34 +274,23 @@ function registerIpc(): void {
     const questionId = stringValue(input?.questionId, "Pergunta", 200);
     const value = stringValue(input?.value, "Resposta", 100);
     const date = stringValue(input?.date, "Data", 10);
-    const profile = requireProfile();
-    if (!currentQuestion || currentQuestion.question.id !== questionId || currentQuestion.date !== date) {
-      throw new Error("A pergunta mudou. Recarregue antes de responder.");
-    }
-    if (!currentQuestion.question.choices.some((choice) => choice.value === value)) {
-      throw new Error("Selecione uma alternativa válida.");
-    }
-    if (store.snapshot().lastAnswerDate === date) throw new Error("A pergunta de hoje já foi respondida.");
+    requireProfile();
     answerInFlight = true;
     try {
-      await withAccessTokens((tokens) =>
-        client.submitAnswer(tokens.pulseToken, profile.id, questionId, value)
-      );
-      await store.markAnswered(date, questionId);
-      currentQuestion = { ...currentQuestion, answered: true };
-      setQuestionRequired(false);
+      await dailyQuestions.answer({ questionId, value, date });
+      setImmediate(() => void dailyQuestions.run(new Date(), false));
       return sessionView();
-    } catch (error) {
-      if (error instanceof ApiError && error.status === 404) {
-        currentQuestion = null;
-        setQuestionRequired(false);
-        sendNavigation("question", false);
-        throw new Error("A pergunta não está mais disponível.");
-      }
-      throw error;
     } finally {
       answerInFlight = false;
     }
+  });
+  ipcMain.handle("question:skip", async (event) => {
+    trusted(event);
+    requireProfile();
+    await dailyQuestions.skip();
+    sendNavigation("feedback", false);
+    setImmediate(() => mainWindow?.hide());
+    return sessionView();
   });
   ipcMain.handle("feedback:employees", async (event) => {
     trusted(event);
@@ -549,14 +389,46 @@ if (!hasLock) {
         }
       });
     });
-    store = new SessionStore();
+    store = new SessionStore(
+      path.join(app.getPath("userData"), "session.json"),
+      safeStorage
+    );
     await store.load();
+    dailyQuestions = new DailyQuestionCoordinator(
+      store,
+      {
+        getQuestion: () => {
+          const profile = requireProfile();
+          return withAccessTokens((tokens) =>
+            client.getQuestion(tokens.pulseToken, profile.id)
+          );
+        },
+        submitAnswer: (answer) => {
+          const profile = requireProfile();
+          return withAccessTokens((tokens) =>
+            client.submitAnswer(
+              tokens.pulseToken,
+              profile.id,
+              answer.questionId,
+              answer.value
+            )
+          );
+        }
+      },
+      {
+        prompt: () => {
+          showNativeNotification("daily-question");
+          showWindow("question", true);
+        },
+        release: releaseQuestionWindow
+      }
+    );
     mainWindow = createWindow();
     tray = createTray();
     registerIpc();
-    powerMonitor.on("resume", () => void scheduler.check());
-    if (store.snapshot().dailyTime) scheduler.start();
-    if (!process.argv.includes("--hidden") || !store.snapshot().profile) {
+    powerMonitor.on("resume", () => void dailyQuestions.run(new Date(), true));
+    if (store.snapshot().profile) scheduler.start();
+    if (!launchedHidden || !store.snapshot().profile) {
       mainWindow.once("ready-to-show", () => showWindow("feedback"));
     }
   });

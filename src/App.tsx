@@ -121,61 +121,15 @@ function TokenScreen({ onLinked }: { onLinked: (session: SessionView) => void })
   );
 }
 
-function ScheduleScreen({
-  session,
-  onSaved
-}: {
-  session: SessionView;
-  onSaved: (session: SessionView) => void;
-}): JSX.Element {
-  const [time, setTime] = useState("09:00");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
-
-  async function submit(event: React.FormEvent): Promise<void> {
-    event.preventDefault();
-    setBusy(true);
-    setError("");
-    try {
-      onSaved(await window.pulseTray.saveDailyTime(time));
-    } catch (reason) {
-      setError(messageOf(reason));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <main className="welcome">
-      <section className="welcome-card">
-        <img src={logo} className="brand-logo" alt="iTransform" />
-        <span className="eyebrow">Bem-vindo, {session.profile?.name}</span>
-        <h1>Quando devemos perguntar?</h1>
-        <p>Escolha o horário em que a pergunta diária deve aparecer automaticamente.</p>
-        <form onSubmit={submit} className="stack">
-          <label htmlFor="daily-time">Horário preferido</label>
-          <input
-            id="daily-time"
-            type="time"
-            value={time}
-            onChange={(event) => setTime(event.target.value)}
-            required
-          />
-          {error && <ErrorNotice message={error} />}
-          <button className="primary" disabled={busy}>{busy ? "Salvando…" : "Começar"}</button>
-        </form>
-      </section>
-    </main>
-  );
-}
-
 function QuestionView({
   required,
   onAnswered,
+  onSkipped,
   openFeedback
 }: {
   required: boolean;
   onAnswered: (session: SessionView) => void;
+  onSkipped: (session: SessionView) => void;
   openFeedback: () => void;
 }): JSX.Element {
   const [question, setQuestion] = useState<DailyQuestion | null>();
@@ -200,8 +154,21 @@ function QuestionView({
         value: selected,
         date: question.date
       });
-      setQuestion({ ...question, answered: true });
+      setQuestion({ ...question, answered: true, answerStatus: "pending-sync" });
       onAnswered(session);
+    } catch (reason) {
+      setError(messageOf(reason));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function skip(): Promise<void> {
+    if (!question || busy) return;
+    setBusy(true);
+    setError("");
+    try {
+      onSkipped(await window.pulseTray.skipQuestion());
     } catch (reason) {
       setError(messageOf(reason));
     } finally {
@@ -219,13 +186,23 @@ function QuestionView({
     );
   }
   if (question.answered) {
+    const pendingSync = question.answerStatus === "pending-sync";
+    const external = question.answerStatus === "external";
     return (
       <Page title="Questão diária">
         <div className="success-card">
           <span className="success-mark">✓</span>
-          <span className="eyebrow">Resposta registrada</span>
+          <span className="eyebrow">
+            {pendingSync ? "Resposta salva" : external ? "Resposta já registrada" : "Resposta registrada"}
+          </span>
           <h2>Obrigado por compartilhar seu pulso de hoje.</h2>
-          <p>Você concluiu a pergunta diária. Que tal reconhecer alguém agora?</p>
+          <p>
+            {pendingSync
+              ? "Sua resposta está protegida neste dispositivo e será sincronizada automaticamente."
+              : external
+                ? "O Sintonia confirmou a resposta enviada por outro canal."
+                : "Você concluiu a pergunta diária. Que tal reconhecer alguém agora?"}
+          </p>
           <button className="secondary" onClick={openFeedback}>Enviar feedback</button>
         </div>
       </Page>
@@ -254,10 +231,15 @@ function QuestionView({
           ))}
         </div>
         {error && <ErrorNotice message={error} />}
-        <button className="primary" disabled={!selected || busy} onClick={answer}>
-          {busy ? "Enviando…" : "Enviar resposta"}
-        </button>
-        {required && <small>Esta janela será liberada após o envio da resposta.</small>}
+        <div className="question-actions">
+          <button className="primary" disabled={!selected || busy} onClick={answer}>
+            {busy ? "Salvando…" : "Confirmar resposta"}
+          </button>
+          <button className="text-button" disabled={busy} onClick={skip}>
+            Pular por agora
+          </button>
+        </div>
+        {required && <small>Se pular, o PulseTray perguntará novamente mais tarde.</small>}
       </div>
     </Page>
   );
@@ -294,22 +276,7 @@ function SettingsView({
   session: SessionView;
   onChange: (session: SessionView) => void;
 }): JSX.Element {
-  const [time, setTime] = useState(session.dailyTime ?? "09:00");
-  const [message, setMessage] = useState("");
-  const [error, setError] = useState("");
   const profile = session.profile!;
-
-  async function save(event: React.FormEvent): Promise<void> {
-    event.preventDefault();
-    setError("");
-    setMessage("");
-    try {
-      onChange(await window.pulseTray.saveDailyTime(time));
-      setMessage("Horário atualizado.");
-    } catch (reason) {
-      setError(messageOf(reason));
-    }
-  }
 
   async function logout(): Promise<void> {
     if (!window.confirm("Deseja desvincular este dispositivo?")) return;
@@ -328,15 +295,13 @@ function SettingsView({
         <div><dt>Ingresso</dt><dd>{dateLabel(profile.startDate)}</dd></div>
         <div><dt>E-mail</dt><dd>{profile.email}</dd></div>
       </dl>
-      <form className="settings-form" onSubmit={save}>
-        <label htmlFor="settings-time">Horário da pergunta diária</label>
-        <div>
-          <input id="settings-time" type="time" value={time} onChange={(event) => setTime(event.target.value)} />
-          <button className="secondary">Salvar</button>
-        </div>
-        {message && <div className="notice success">{message}</div>}
-        {error && <ErrorNotice message={error} />}
-      </form>
+      <section className="settings-form">
+        <strong>Pergunta diária automática</strong>
+        <p>
+          O PulseTray verifica a pergunta no primeiro acesso e pela manhã. Se você pular,
+          ele perguntará novamente mais tarde.
+        </p>
+      </section>
       <button className="danger-link" onClick={logout}>Fazer logout</button>
     </Page>
   );
@@ -390,7 +355,6 @@ export default function App(): JSX.Element {
   if (error) return <main className="fatal"><ErrorNotice message={error} /></main>;
   if (!session) return <PanelLoading label="Abrindo o PulseTray…" />;
   if (!session.linked) return <TokenScreen onLinked={setSession} />;
-  if (!session.configured) return <ScheduleScreen session={session} onSaved={setSession} />;
 
   if (view === "question") {
     return (
@@ -402,6 +366,11 @@ export default function App(): JSX.Element {
             onAnswered={(next) => {
               setSession(next);
               setRequired(false);
+            }}
+            onSkipped={(next) => {
+              setSession(next);
+              setRequired(false);
+              setView("feedback");
             }}
             openFeedback={() => setView("feedback")}
           />

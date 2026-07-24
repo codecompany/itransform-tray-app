@@ -21,8 +21,12 @@ export default defineConfig({
       include: [
         "src/App.tsx",
         "src/FeedbackView.tsx",
+        "electron/answer-sync.ts",
+        "electron/daily-question-coordinator.ts",
         "electron/notifications.ts",
+        "electron/question-state.ts",
         "electron/scheduler.ts",
+        "electron/session-store.ts",
         "electron/sintonia.ts",
         "electron/window-mode.ts"
       ],

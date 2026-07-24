@@ -20,18 +20,11 @@ describe("native notification policy", () => {
     expect(notice.body).not.toContain("@");
   });
 
-  it("uses generic native notices for linking and schedule changes", () => {
+  it("uses a generic native notice for linking", () => {
     expect(notificationFor("linked")).toEqual({
       body: "Este dispositivo foi vinculado ao Sintonia.",
       required: false,
       view: "feedback"
     });
-    expect(notificationFor("schedule-updated", "08:30")).toEqual({
-      body: "A pergunta diária será exibida às 08:30.",
-      required: false,
-      view: "settings"
-    });
-    expect(notificationFor("schedule-updated").body)
-      .toBe("Horário da pergunta diária atualizado.");
   });
 });

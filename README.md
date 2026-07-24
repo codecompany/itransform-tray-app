@@ -1,9 +1,10 @@
 # PulseTray
 
 Aplicativo Electron compacto do Sintonia para a pergunta diária e feedbacks.
-Ele permanece na área de notificação, inicia com o sistema e abre a pergunta
-em tela cheia no horário escolhido pelo colaborador. A janela não pode ser
-fechada ou minimizada até a API aceitar a resposta.
+Ele permanece na área de notificação, inicia com o sistema e verifica a pergunta
+no primeiro acesso e pela manhã. Quando disponível, abre a experiência em tela
+cheia. O colaborador pode responder ou usar **Agora não**; nesse caso, uma
+heurística local agenda uma nova tentativa mais tarde.
 
 ## Desenvolvimento
 
@@ -18,7 +19,9 @@ O processo principal lê `PULSETRAY_API_URL` e usa
 `https://api.storifly.ai` por padrão. No primeiro acesso, o colaborador solicita
 o token com o e-mail corporativo e recebe a credencial na própria caixa postal.
 A credencial e os tokens oficiais de curta duração nunca são entregues ao
-renderer: ficam protegidos pelo armazenamento nativo do sistema.
+renderer: ficam protegidos pelo armazenamento nativo do sistema. A pergunta em
+cache, os próximos horários e a fila de respostas também são criptografados no
+processo principal e gravados por substituição atômica.
 
 ## Verificação
 
@@ -35,8 +38,10 @@ npm run smoke:npm
 
 ## Contratos consumidos
 
-- `GET /v1/pulse/question/:employeeId`
-- `POST /v1/pulse/answer/:employeeId`
+- `GET /v1/pulse/question/:employeeId` — inclui `answered`, a confirmação
+  autoritativa de que qualquer canal já respondeu naquele dia.
+- `POST /v1/pulse/answer/:employeeId` — preserva de forma idempotente somente a
+  primeira resposta diária quando dois canais concorrem.
 - `POST /v1/pulse/feedbacks`
 - `POST /v1/pulse/tray/access-requests`
 - `POST /v1/pulse/tray/session`
@@ -53,8 +58,17 @@ após uma seleção válida. Falhas no diretório e nas subdimensões podem ser
 recuperadas de forma independente.
 
 A pergunta diária não ocupa uma aba. Ela é aberta pelo agendador ou
-manualmente pelo menu da área de notificação. Lembretes e confirmações são
-notificações nativas do sistema, com texto genérico e sem conteúdo do feedback.
+manualmente pelo menu da área de notificação. Não existe configuração de
+horário: um início interativo verifica imediatamente; uma inicialização oculta
+antes das 09:00 aguarda a manhã. **Agora não** usa atrasos crescentes, com
+jitter, persistidos localmente.
+
+Ao responder, a seleção é salva primeiro na fila local e a interface confirma
+sem depender da disponibilidade do servidor. A sincronização sempre consulta
+`answered` antes de enviar. Falhas transitórias preservam a fila e usam backoff;
+uma resposta encontrada no Slack ou no e-mail encerra o item local sem
+sobrescrever o servidor. Lembretes e confirmações são notificações nativas do
+sistema, com texto genérico e sem conteúdo do feedback.
 A tela de recebidos continua
 apresentando indisponibilidade explícita enquanto não existir um contrato
 autorizado para esse histórico. Nenhuma rota alternativa, acesso a banco,

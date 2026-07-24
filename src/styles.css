@@ -508,9 +508,18 @@ textarea:focus {
   background: var(--forest);
 }
 
-.question-card > .primary,
+.question-actions > .primary,
 .feedback-form > .primary {
   width: 100%;
+}
+
+.question-actions {
+  display: grid;
+  gap: 10px;
+}
+
+.question-actions .text-button {
+  justify-self: center;
 }
 
 .success-card {
@@ -544,6 +553,13 @@ textarea:focus {
 .success-card p {
   max-width: 330px;
   margin-bottom: 22px;
+  color: var(--muted);
+  font-size: 0.82rem;
+  line-height: 1.55;
+}
+
+.settings-form > p {
+  margin: 8px 0 0;
   color: var(--muted);
   font-size: 0.82rem;
   line-height: 1.55;

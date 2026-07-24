@@ -173,12 +173,18 @@ export class SintoniaClient {
     };
   }
 
-  async getQuestion(token: string, employeeId: string): Promise<Omit<DailyQuestion, "answered"> | null> {
+  async getQuestion(token: string, employeeId: string): Promise<DailyQuestion | null> {
     try {
-      return await this.request<Omit<DailyQuestion, "answered">>(
+      const question = await this.request<Omit<DailyQuestion, "answerStatus"> & { answered?: boolean }>(
         `/v1/pulse/question/${encodeURIComponent(employeeId)}`,
         token
       );
+      const answered = question.answered === true;
+      return {
+        ...question,
+        answered,
+        answerStatus: answered ? "external" : "unanswered"
+      };
     } catch (error) {
       if (error instanceof ApiError && error.status === 404) return null;
       throw error;
