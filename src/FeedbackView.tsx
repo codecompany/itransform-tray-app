@@ -366,6 +366,14 @@ export default function FeedbackView({
     setStepIndex(boundedStepIndex - 1);
   }
 
+  function cancel(): void {
+    setDraft(newDraft());
+    setQuery("");
+    setSearchOpen(false);
+    setSubmitError("");
+    setStepIndex(0);
+  }
+
   function goToStep(step: WizardStep): void {
     const next = steps.indexOf(step);
     if (next >= 0) setStepIndex(next);
@@ -589,14 +597,19 @@ export default function FeedbackView({
         </section>
 
         <footer className="wizard-actions">
-          <button
-            type="button"
-            className="secondary"
-            onClick={goPrevious}
-            disabled={boundedStepIndex === 0 || busy}
-          >
-            Anterior
-          </button>
+          <div className="wizard-secondary-actions">
+            <button type="button" className="text-button" onClick={cancel} disabled={busy}>
+              Cancelar
+            </button>
+            <button
+              type="button"
+              className="secondary"
+              onClick={goPrevious}
+              disabled={boundedStepIndex === 0 || busy}
+            >
+              Anterior
+            </button>
+          </div>
           {currentStep === "review" ? (
             <button type="submit" className="primary" disabled={busy || !canSubmit}>
               {busy ? "Enviando…" : "Concluir envio"}
