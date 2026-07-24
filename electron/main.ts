@@ -41,7 +41,10 @@ import { shouldPromptAutomatically } from "./question-state.js";
 import { SessionStore } from "./session-store.js";
 import { createTrayMenuTemplate } from "./tray-menu.js";
 import { quietUntil, validateQuietHours } from "./quiet-hours.js";
-import { applyQuestionWindowMode } from "./window-mode.js";
+import {
+  applyQuestionWindowMode,
+  questionModeChanged
+} from "./window-mode.js";
 import { validateFeedbackDraft } from "./feedback-validation.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -119,10 +122,12 @@ function stringValue(value: unknown, field: string, max = 8_192): string {
   return value.trim();
 }
 
-function setQuestionRequired(required: boolean): void {
+function setQuestionRequired(required: boolean): boolean {
+  const changed = questionModeChanged(questionRequired, required);
   questionRequired = required;
-  if (!questionWindow || questionWindow.isDestroyed()) return;
+  if (!questionWindow || questionWindow.isDestroyed()) return changed;
   applyQuestionWindowMode(questionWindow, required);
+  return changed;
 }
 
 function sendNavigation(
@@ -199,8 +204,9 @@ function showNativeNotification(kind: NativeNotificationKind): void {
 }
 
 function releaseQuestionWindow(): void {
-  setQuestionRequired(false);
-  sendNavigation(questionWindow, "question", false);
+  if (setQuestionRequired(false)) {
+    sendNavigation(questionWindow, "question", false);
+  }
 }
 
 const launchedHidden = process.argv.includes("--hidden");
