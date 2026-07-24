@@ -151,6 +151,64 @@ describe("PulseApiClient", () => {
       .resolves.toBeNull();
   });
 
+  it("derives leadership from active direct reports", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(response({
+      employees: [
+        { id: "employee-2", managerId: "employee-1", status: "active" },
+        { id: "employee-3", managerId: "other", status: "active" }
+      ],
+      nextCursor: ""
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(new PulseApiClient("https://example.test").hasDirectReports(
+      "employee-token",
+      "company-1",
+      "employee-1"
+    )).resolves.toBe(true);
+    expect(fetchMock.mock.calls[0][0]).toContain(
+      "/v1/employees/list?companyId=company-1&limit=500"
+    );
+    expect(fetchMock).toHaveBeenCalledOnce();
+  });
+
+  it("ignores inactive reports and stops after the final employee page", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(response({
+      employees: [
+        { id: "employee-2", managerId: "employee-1", status: "inactive" }
+      ],
+      nextCursor: "0"
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(new PulseApiClient("https://example.test").hasDirectReports(
+      "employee-token",
+      "company-1",
+      "employee-1"
+    )).resolves.toBe(false);
+    expect(fetchMock).toHaveBeenCalledOnce();
+  });
+
+  it("continues leadership detection across employee pages", async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(response({
+        employees: [{ id: "employee-2", managerId: "other", status: "active" }],
+        nextCursor: "page-2"
+      }))
+      .mockResolvedValueOnce(response({
+        employees: [{ id: "employee-3", managerId: "employee-1", status: "active" }],
+        nextCursor: ""
+      }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(new PulseApiClient("https://example.test").hasDirectReports(
+      "employee-token",
+      "company-1",
+      "employee-1"
+    )).resolves.toBe(true);
+    expect(fetchMock.mock.calls[1][0]).toContain("cursor=page-2");
+  });
+
   it("maps the authoritative answer state from the Pulse service", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(response({
       employeeId: "employee-1",

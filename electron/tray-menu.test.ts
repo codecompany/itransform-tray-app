@@ -4,8 +4,7 @@ import { createTrayMenuTemplate, type TrayMenuActions } from "./tray-menu";
 function actions(): TrayMenuActions {
   return {
     openDailyQuestion: vi.fn(),
-    openFeedbackComposer: vi.fn(),
-    openReceivedFeedback: vi.fn(),
+    openFeedbacks: vi.fn(),
     openSettings: vi.fn(),
     quit: vi.fn()
   };
@@ -19,21 +18,17 @@ describe("tray menu", () => {
     expect(template[1]).toEqual({ type: "separator" });
   });
 
-  it("opens windows only from explicit menu actions", () => {
+  it("groups feedback actions and keeps adjustments explicit", () => {
     const callbacks = actions();
     const template = createTrayMenuTemplate(callbacks);
 
     expect(template).toEqual(expect.arrayContaining([
       expect.objectContaining({
-        label: "Enviar Feedback",
-        click: callbacks.openFeedbackComposer
+        label: "Feedbacks",
+        click: callbacks.openFeedbacks
       }),
       expect.objectContaining({
-        label: "Receber Feedback",
-        click: callbacks.openReceivedFeedback
-      }),
-      expect.objectContaining({
-        label: "Configurações",
+        label: "Ajustes",
         click: callbacks.openSettings
       })
     ]));

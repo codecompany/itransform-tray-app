@@ -228,6 +228,33 @@ export class PulseApiClient {
       .sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
   }
 
+  async hasDirectReports(
+    token: string,
+    companyId: string,
+    employeeId: string
+  ): Promise<boolean> {
+    let cursor = "";
+    for (let page = 0; page < 100; page += 1) {
+      const query = new URLSearchParams({ companyId, limit: "500" });
+      if (cursor) query.set("cursor", cursor);
+      const result = await this.request<Record<string, unknown>>(
+        `/v1/employees/list?${query}`,
+        token
+      );
+      const employees = Array.isArray(result.employees)
+        ? result.employees as EmployeeRecord[]
+        : [];
+      if (employees.some((employee) =>
+        (!employee.status || employee.status.trim().toLowerCase() === "active") &&
+        employee.managerId === employeeId
+      )) return true;
+      const next = String(result.nextCursor ?? "");
+      if (!next || next === "0" || next === cursor) return false;
+      cursor = next;
+    }
+    return false;
+  }
+
   async listFeedbackTaxonomy(token: string, companyId: string): Promise<FeedbackTaxonomy> {
     const [dimensions, indexes] = await Promise.all([
       this.listPages<DimensionRecord>(token, "/v1/dimensions/list", companyId, "dimensions"),

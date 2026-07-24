@@ -3,7 +3,8 @@
 Aplicativo Electron compacto da plataforma iTransform para a pergunta diária e feedbacks.
 Ele permanece na área de notificação, inicia com o sistema e verifica a pergunta
 no primeiro acesso e pela manhã. Quando disponível, abre a experiência em tela
-cheia. O colaborador pode responder ou usar **Agora não**; nesse caso, uma
+própria, fixa e sem barra de título. O colaborador pode responder ou usar
+**Agora não**; nesse caso, uma
 heurística local agenda uma nova tentativa mais tarde.
 
 ## Desenvolvimento
@@ -57,13 +58,20 @@ primeiro por nome ou e-mail; as subdimensões e os demais campos só aparecem
 após uma seleção válida. Falhas no diretório e nas subdimensões podem ser
 recuperadas de forma independente.
 
-A pergunta diária não ocupa uma aba. Ela é aberta pelo agendador ou
-manualmente pelo menu da área de notificação. Clicar no ícone do tray apenas
-abre o menu; somente as ações de feedback e configurações abrem a janela
-regular. Não existe configuração de
-horário: um início interativo verifica imediatamente; uma inicialização oculta
+A pergunta diária não ocupa uma aba. Ela é aberta pelo agendador ou manualmente
+pelo menu da área de notificação em uma janela separada, sem barra de título,
+com tamanho fixo e sem redimensionamento. Clicar no ícone do tray apenas abre o
+menu; Feedbacks e Ajustes abrem a janela regular. Em Ajustes, o colaborador
+configura uma ou mais janelas de silêncio, nunca um horário preferido para a
+pergunta. Um início interativo verifica imediatamente; uma inicialização oculta
 antes das 09:00 aguarda a manhã. **Agora não** usa atrasos crescentes, com
 jitter, persistidos localmente.
+
+Feedbacks enviados e recebidos compartilham a área Feedbacks, em abas
+separadas. A aba Enviados mantém o formulário e os registros locais recentes.
+Para líderes, a navegação também exibe ManagerHub entre Feedbacks e Ajustes; o
+botão abre `https://itransform.cc` no navegador, sem compartilhar credenciais
+do aplicativo.
 
 Ao responder, a seleção é salva primeiro na fila local e a interface confirma
 sem depender da disponibilidade do servidor. A sincronização sempre consulta
@@ -74,7 +82,7 @@ sistema, com texto genérico e sem conteúdo do feedback.
 A tela de recebidos continua
 apresentando indisponibilidade explícita enquanto não existir um contrato
 autorizado para esse histórico. Nenhuma rota alternativa, acesso a banco,
-datalake ou Manager Hub é utilizado.
+datalake ou acesso direto ao Manager Hub é utilizado.
 
 ## Distribuição
 

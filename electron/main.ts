@@ -8,6 +8,7 @@ import {
   powerMonitor,
   safeStorage,
   session,
+  shell,
   Tray
 } from "electron";
 import path from "node:path";
@@ -16,6 +17,7 @@ import type {
   AppView,
   EmployeeProfile,
   FeedbackDraft,
+  QuietHoursWindow,
   SessionView
 } from "../src/contracts.js";
 import {
@@ -38,16 +40,19 @@ import { DailyQuestionCoordinator } from "./daily-question-coordinator.js";
 import { shouldPromptAutomatically } from "./question-state.js";
 import { SessionStore } from "./session-store.js";
 import { createTrayMenuTemplate } from "./tray-menu.js";
+import { quietUntil, validateQuietHours } from "./quiet-hours.js";
 import { applyQuestionWindowMode } from "./window-mode.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const client = new PulseApiClient();
-let mainWindow: BrowserWindow | undefined;
+let panelWindow: BrowserWindow | undefined;
+let questionWindow: BrowserWindow | undefined;
 let tray: Tray | undefined;
 let quitting = false;
 let questionRequired = false;
 let answerInFlight = false;
 let feedbackInFlight = false;
+let leadershipRefresh: Promise<void> | undefined;
 let store: SessionStore;
 let dailyQuestions: DailyQuestionCoordinator;
 
@@ -60,7 +65,8 @@ function sessionView(): SessionView {
     profile: state.profile,
     lastAnswerDate: daily.lastAnswerDate,
     events: state.events,
-    receivedFeedbackAvailable: false
+    receivedFeedbackAvailable: false,
+    quietHours: [...store.quietHours()]
   };
 }
 
@@ -114,44 +120,87 @@ function stringValue(value: unknown, field: string, max = 8_192): string {
 
 function setQuestionRequired(required: boolean): void {
   questionRequired = required;
-  if (!mainWindow || mainWindow.isDestroyed()) return;
-  applyQuestionWindowMode(mainWindow, required);
+  if (!questionWindow || questionWindow.isDestroyed()) return;
+  applyQuestionWindowMode(questionWindow, required);
 }
 
-function sendNavigation(view: AppView, required = false): void {
-  if (!mainWindow || mainWindow.isDestroyed()) return;
-  const send = () => mainWindow?.webContents.send("app:navigate", view, required);
-  if (mainWindow.webContents.isLoading()) mainWindow.webContents.once("did-finish-load", send);
+function sendNavigation(
+  window: BrowserWindow | undefined,
+  view: AppView,
+  required = false
+): void {
+  if (!window || window.isDestroyed()) return;
+  const send = () => window.webContents.send("app:navigate", view, required);
+  if (window.webContents.isLoading()) window.webContents.once("did-finish-load", send);
   else send();
 }
 
-function showWindow(view: AppView = "feedback", required = false): void {
-  if (!mainWindow) return;
-  if (required) setQuestionRequired(true);
-  const targetView = required || questionRequired ? "question" : view;
-  mainWindow.show();
-  mainWindow.focus();
-  sendNavigation(targetView, required || questionRequired);
+function rendererUrl(surface: "panel" | "question"): string {
+  const devUrl = process.env.VITE_DEV_SERVER_URL;
+  if (devUrl) {
+    const url = new URL(devUrl);
+    url.searchParams.set("surface", surface);
+    return url.toString();
+  }
+  return "";
+}
+
+function loadRenderer(window: BrowserWindow, surface: "panel" | "question"): void {
+  const devUrl = rendererUrl(surface);
+  if (devUrl) {
+    void window.loadURL(devUrl);
+    return;
+  }
+  void window.loadFile(
+    path.join(app.getAppPath(), "dist", "renderer", "index.html"),
+    { query: { surface } }
+  );
+}
+
+function showPanelWindow(view: Exclude<AppView, "question"> = "feedbacks"): void {
+  if (!panelWindow || panelWindow.isDestroyed()) return;
+  panelWindow.show();
+  panelWindow.focus();
+  sendNavigation(panelWindow, view);
+}
+
+function showQuestionWindow(required = false): void {
+  if (!questionWindow || questionWindow.isDestroyed()) {
+    questionWindow = createQuestionWindow();
+  }
+  const enforced = required || questionRequired;
+  setQuestionRequired(enforced);
+  questionWindow.center();
+  questionWindow.show();
+  questionWindow.focus();
+  sendNavigation(questionWindow, "question", enforced);
 }
 
 function showNativeNotification(kind: NativeNotificationKind): void {
   if (!Notification.isSupported()) return;
   const policy = notificationFor(kind);
   const notification = new Notification({ title: PRODUCT_NAME, body: policy.body });
-  notification.on("click", () => showWindow(policy.view, policy.required));
+  notification.on("click", () => {
+    if (policy.view === "question") showQuestionWindow(policy.required);
+    else showPanelWindow(policy.view);
+  });
   notification.show();
 }
 
 function releaseQuestionWindow(): void {
-  if (!questionRequired) return;
   setQuestionRequired(false);
-  sendNavigation("question", false);
+  sendNavigation(questionWindow, "question", false);
 }
 
 const launchedHidden = process.argv.includes("--hidden");
-const scheduler = new DailyScheduler((now) =>
-  dailyQuestions.run(now, shouldPromptAutomatically(launchedHidden, now))
-);
+const scheduler = new DailyScheduler(async (now) => {
+  const quietEnd = quietUntil([...store.quietHours()], now);
+  await dailyQuestions.run(
+    now,
+    shouldPromptAutomatically(launchedHidden, now) && !quietEnd,
+    quietEnd
+  );
+});
 app.setPath("userData", path.join(app.getPath("appData"), LEGACY_USER_DATA_DIRECTORY));
 
 function applicationIconPath(): string {
@@ -169,7 +218,17 @@ function trayIcon(): Electron.NativeImage {
   return nativeImage.createFromPath(applicationIconPath()).resize({ width: 20, height: 20 });
 }
 
-function createWindow(): BrowserWindow {
+function secureWebPreferences(): Electron.WebPreferences {
+  return {
+    preload: path.join(__dirname, "preload.cjs"),
+    contextIsolation: true,
+    nodeIntegration: false,
+    sandbox: true,
+    webSecurity: true
+  };
+}
+
+function createPanelWindow(): BrowserWindow {
   const window = new BrowserWindow({
     width: 520,
     height: 720,
@@ -181,35 +240,50 @@ function createWindow(): BrowserWindow {
     backgroundColor: "#f5f7f6",
     autoHideMenuBar: true,
     skipTaskbar: true,
-    webPreferences: {
-      preload: path.join(__dirname, "preload.cjs"),
-      contextIsolation: true,
-      nodeIntegration: false,
-      sandbox: true,
-      webSecurity: true
-    }
+    webPreferences: secureWebPreferences()
   });
+  window.on("close", (event) => {
+    if (quitting) return;
+    event.preventDefault();
+    window.hide();
+  });
+  loadRenderer(window, "panel");
+  return window;
+}
+
+function createQuestionWindow(): BrowserWindow {
+  const window = new BrowserWindow({
+    width: 660,
+    height: 720,
+    show: false,
+    title: "Questão diária",
+    icon: applicationIconPath(),
+    frame: false,
+    backgroundColor: "#f5f7f6",
+    resizable: false,
+    minimizable: false,
+    maximizable: false,
+    fullscreenable: false,
+    autoHideMenuBar: true,
+    skipTaskbar: true,
+    webPreferences: secureWebPreferences()
+  });
+  applyQuestionWindowMode(window, false);
   window.on("close", (event) => {
     if (quitting) return;
     event.preventDefault();
     if (questionRequired) {
       window.show();
       window.focus();
-    } else {
-      window.hide();
+      return;
     }
+    window.hide();
   });
   window.on("minimize", () => {
-    if (!questionRequired) return;
     window.restore();
     window.focus();
   });
-  window.on("leave-full-screen", () => {
-    if (questionRequired) window.setFullScreen(true);
-  });
-  const devUrl = process.env.VITE_DEV_SERVER_URL;
-  if (devUrl) void window.loadURL(devUrl);
-  else void window.loadFile(path.join(app.getAppPath(), "dist", "renderer", "index.html"));
+  loadRenderer(window, "question");
   return window;
 }
 
@@ -217,14 +291,13 @@ function createTray(): Tray {
   const appTray = new Tray(trayIcon());
   appTray.setToolTip(PRODUCT_NAME);
   appTray.setContextMenu(Menu.buildFromTemplate(createTrayMenuTemplate({
-    openDailyQuestion: () => showWindow("question"),
-    openFeedbackComposer: () => showWindow("feedback"),
-    openReceivedFeedback: () => showWindow("received"),
-    openSettings: () => showWindow("settings"),
+    openDailyQuestion: () => showQuestionWindow(false),
+    openFeedbacks: () => showPanelWindow("feedbacks"),
+    openSettings: () => showPanelWindow("settings"),
     quit: () => {
-        quitting = true;
-        app.quit();
-      }
+      quitting = true;
+      app.quit();
+    }
   })));
   return appTray;
 }
@@ -233,19 +306,49 @@ async function logout(): Promise<SessionView> {
   scheduler.stop();
   dailyQuestions?.clear();
   setQuestionRequired(false);
+  questionWindow?.hide();
   await store.clear();
   return sessionView();
 }
 
 function trusted(event: Electron.IpcMainInvokeEvent): void {
-  if (!mainWindow || event.sender.id !== mainWindow.webContents.id) {
+  const trustedIds = [panelWindow, questionWindow]
+    .filter((window): window is BrowserWindow => Boolean(window && !window.isDestroyed()))
+    .map((window) => window.webContents.id);
+  if (!trustedIds.includes(event.sender.id)) {
     throw new Error("Origem IPC não autorizada.");
   }
 }
 
+async function refreshLeadership(): Promise<void> {
+  const snapshot = store.snapshot();
+  const profile = snapshot.profile;
+  const tokenCipher = snapshot.tokenCipher;
+  if (!profile || profile.isLeader !== undefined) return;
+  leadershipRefresh ??= (async () => {
+    try {
+      const isLeader = await withAccessTokens((tokens) =>
+        client.hasDirectReports(tokens.employeeToken, profile.companyId, profile.id)
+      );
+      const current = store.snapshot();
+      if (current.profile?.id !== profile.id || current.tokenCipher !== tokenCipher) return;
+      await store.setProfile({ ...profile, isLeader });
+    } catch (error) {
+      console.warn(JSON.stringify({
+        event: "leadership_check_failed",
+        status: error instanceof ApiError ? error.status : undefined
+      }));
+    } finally {
+      leadershipRefresh = undefined;
+    }
+  })();
+  await leadershipRefresh;
+}
+
 function registerIpc(): void {
-  ipcMain.handle("session:bootstrap", (event) => {
+  ipcMain.handle("session:bootstrap", async (event) => {
     trusted(event);
+    await refreshLeadership();
     return sessionView();
   });
   ipcMain.handle("session:request-access", async (event, rawEmail: unknown) => {
@@ -260,10 +363,20 @@ function registerIpc(): void {
     trusted(event);
     const token = stringValue(rawToken, "Token");
     const tokens = await client.exchangeTrayToken(token);
-    const profile = await client.link(tokens.employeeToken, tokens.employeeId);
+    const linkedProfile = await client.link(tokens.employeeToken, tokens.employeeId);
+    const isLeader = await client.hasDirectReports(
+      tokens.employeeToken,
+      linkedProfile.companyId,
+      linkedProfile.id
+    ).catch(() => undefined);
+    const profile = { ...linkedProfile, isLeader };
     await store.link(token, tokens, profile);
     scheduler.start(false);
-    setImmediate(() => void dailyQuestions.run(new Date(), true));
+    setImmediate(() => {
+      const now = new Date();
+      const quietEnd = quietUntil([...store.quietHours()], now);
+      void dailyQuestions.run(now, !quietEnd, quietEnd);
+    });
     showNativeNotification("linked");
     return sessionView();
   });
@@ -299,9 +412,15 @@ function registerIpc(): void {
     trusted(event);
     requireProfile();
     await dailyQuestions.skip();
-    sendNavigation("feedback", false);
-    setImmediate(() => mainWindow?.hide());
+    setImmediate(() => questionWindow?.hide());
     return sessionView();
+  });
+  ipcMain.handle("question:dismiss", (event) => {
+    trusted(event);
+    if (questionRequired) {
+      throw new Error("Responda ou pule a pergunta antes de fechar.");
+    }
+    questionWindow?.hide();
   });
   ipcMain.handle("feedback:employees", async (event) => {
     trusted(event);
@@ -357,6 +476,7 @@ function registerIpc(): void {
         `${selection.subDimension.name} · importância ${draft.importance}`
       );
       showNativeNotification("feedback-sent");
+      return sessionView();
     } finally {
       feedbackInFlight = false;
     }
@@ -369,13 +489,45 @@ function registerIpc(): void {
       message: "O serviço iTransform ainda não expõe uma rota autorizada para feedbacks recebidos."
     };
   });
+  ipcMain.handle("settings:quiet-hours", async (event, raw: unknown) => {
+    trusted(event);
+    requireProfile();
+    const windows = validateQuietHours(raw) as QuietHoursWindow[];
+    await store.setQuietHours(windows);
+    const now = new Date();
+    const quietEnd = quietUntil(windows, now);
+    const daily = { ...store.daily() };
+    daily.nextPromptAt = quietEnd?.toISOString() ?? now.toISOString();
+    daily.nextCheckAt = daily.nextPromptAt;
+    await store.setDaily(daily);
+    setImmediate(() => void scheduler.check(new Date()));
+    return sessionView();
+  });
+  ipcMain.handle("navigation:manager-hub", async (event) => {
+    trusted(event);
+    if (!requireProfile().isLeader) {
+      throw new Error("O ManagerHub está disponível apenas para líderes.");
+    }
+    await shell.openExternal("https://itransform.cc");
+  });
+  ipcMain.handle("navigation:feedbacks", (event) => {
+    trusted(event);
+    if (questionRequired) {
+      throw new Error("Responda ou pule a pergunta antes de abrir os feedbacks.");
+    }
+    questionWindow?.hide();
+    showPanelWindow("feedbacks");
+  });
 }
 
 const hasLock = app.requestSingleInstanceLock();
 if (!hasLock) {
   app.quit();
 } else {
-  app.on("second-instance", () => showWindow(questionRequired ? "question" : "feedback", questionRequired));
+  app.on("second-instance", () => {
+    if (questionRequired) showQuestionWindow(true);
+    else showPanelWindow();
+  });
   app.on("window-all-closed", () => undefined);
   app.on("before-quit", () => {
     quitting = true;
@@ -429,18 +581,18 @@ if (!hasLock) {
       {
         prompt: () => {
           showNativeNotification("daily-question");
-          showWindow("question", true);
+          showQuestionWindow(true);
         },
         release: releaseQuestionWindow
       }
     );
-    mainWindow = createWindow();
     tray = createTray();
+    panelWindow = createPanelWindow();
     registerIpc();
-    powerMonitor.on("resume", () => void dailyQuestions.run(new Date(), true));
+    powerMonitor.on("resume", () => void scheduler.check(new Date()));
     if (store.snapshot().profile) scheduler.start();
     if (!launchedHidden || !store.snapshot().profile) {
-      mainWindow.once("ready-to-show", () => showWindow("feedback"));
+      panelWindow.once("ready-to-show", () => showPanelWindow("feedbacks"));
     }
   });
 }

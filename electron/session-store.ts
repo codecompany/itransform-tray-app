@@ -1,7 +1,12 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
-import type { ActivityEvent, EmployeeProfile } from "../src/contracts.js";
+import type {
+  ActivityEvent,
+  EmployeeProfile,
+  QuietHoursWindow
+} from "../src/contracts.js";
 import type { AccessTokenBundle } from "./pulse-api.js";
+import { normalizeQuietHours } from "./quiet-hours.js";
 import {
   emptyDailyState,
   normalizeDailyState,
@@ -12,6 +17,7 @@ interface PersistedSession {
   tokenCipher?: string;
   tokensCipher?: string;
   dailyCipher?: string;
+  preferencesCipher?: string;
   profile?: EmployeeProfile;
   events: ActivityEvent[];
   lastAnswerDate?: string;
@@ -33,6 +39,7 @@ export interface SecureStorage {
 export class SessionStore {
   private state: PersistedSession = { events: [] };
   private dailyState = emptyDailyState();
+  private quietHoursState: QuietHoursWindow[] = [];
 
   constructor(
     private readonly file: string,
@@ -45,6 +52,7 @@ export class SessionStore {
       this.state = JSON.parse(raw) as PersistedSession;
       this.state.events ??= [];
       this.dailyState = this.loadDailyState();
+      this.quietHoursState = this.loadQuietHours();
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
         await this.clear();
@@ -60,6 +68,10 @@ export class SessionStore {
     return this.dailyState;
   }
 
+  quietHours(): readonly QuietHoursWindow[] {
+    return this.quietHoursState;
+  }
+
   token(): string {
     if (!this.state.tokenCipher) throw new Error("Vincule seu token antes de continuar.");
     return this.decrypt(this.state.tokenCipher);
@@ -73,6 +85,7 @@ export class SessionStore {
   async link(token: string, tokens: AccessTokenBundle, profile: EmployeeProfile): Promise<void> {
     this.assertEncryption();
     this.dailyState = emptyDailyState();
+    this.quietHoursState = [];
     this.state = {
       tokenCipher: this.encrypt(token),
       tokensCipher: this.encrypt(JSON.stringify(tokens)),
@@ -92,9 +105,19 @@ export class SessionStore {
     await this.save();
   }
 
+  async setProfile(profile: EmployeeProfile): Promise<void> {
+    this.state.profile = profile;
+    await this.save();
+  }
+
   async setDaily(next: DailyState, event?: StoreEvent): Promise<void> {
     this.dailyState = normalizeDailyState(next);
     if (event) this.event(event);
+    await this.save();
+  }
+
+  async setQuietHours(windows: QuietHoursWindow[]): Promise<void> {
+    this.quietHoursState = normalizeQuietHours(windows);
     await this.save();
   }
 
@@ -106,6 +129,7 @@ export class SessionStore {
   async clear(): Promise<void> {
     this.state = { events: [] };
     this.dailyState = emptyDailyState();
+    this.quietHoursState = [];
     await fs.rm(this.file, { force: true });
   }
 
@@ -135,8 +159,23 @@ export class SessionStore {
     this.state.events = this.state.events.slice(0, 200);
   }
 
+  private loadQuietHours(): QuietHoursWindow[] {
+    if (!this.state.preferencesCipher) return [];
+    try {
+      const preferences = JSON.parse(this.decrypt(this.state.preferencesCipher)) as {
+        quietHours?: unknown;
+      };
+      return normalizeQuietHours(preferences.quietHours);
+    } catch {
+      return [];
+    }
+  }
+
   private async save(): Promise<void> {
     this.state.dailyCipher = this.encrypt(JSON.stringify(this.dailyState));
+    this.state.preferencesCipher = this.encrypt(JSON.stringify({
+      quietHours: this.quietHoursState
+    }));
     await fs.mkdir(path.dirname(this.file), { recursive: true });
     const temp = `${this.file}.tmp`;
     await fs.writeFile(temp, JSON.stringify(this.state), { encoding: "utf8", mode: 0o600 });

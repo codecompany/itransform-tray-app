@@ -51,31 +51,54 @@ export class DailyQuestionCoordinator {
     this.question = null;
   }
 
-  async run(now: Date, promptWhenAvailable: boolean): Promise<void> {
+  async run(
+    now: Date,
+    promptWhenAvailable: boolean,
+    nextAllowedPromptAt?: Date
+  ): Promise<void> {
     if (this.taskInFlight || !this.store.snapshot().profile) return;
     this.taskInFlight = true;
     try {
       await this.syncPendingAnswer(now);
       if (this.store.snapshot().profile && isDue(this.store.daily().nextCheckAt, now)) {
-        await this.check(now, promptWhenAvailable);
+        await this.check(now, promptWhenAvailable, nextAllowedPromptAt);
       }
     } finally {
       this.taskInFlight = false;
     }
   }
 
-  async check(now = new Date(), promptWhenAvailable = true): Promise<void> {
+  async check(
+    now = new Date(),
+    promptWhenAvailable = true,
+    nextAllowedPromptAt?: Date
+  ): Promise<void> {
     if (!this.store.snapshot().profile) return;
     try {
       const remote = await this.gateway.getQuestion();
       if (remote) {
-        await this.applyRemoteQuestion(remote, now, promptWhenAvailable);
+        await this.applyRemoteQuestion(
+          remote,
+          now,
+          promptWhenAvailable,
+          nextAllowedPromptAt
+        );
         return;
       }
-      await this.deferQuestionCheck(now, "not-found", promptWhenAvailable);
+      await this.deferQuestionCheck(
+        now,
+        "not-found",
+        promptWhenAvailable,
+        nextAllowedPromptAt
+      );
     } catch (error) {
       if (!this.store.snapshot().profile) return;
-      await this.deferQuestionCheck(now, "failure", promptWhenAvailable);
+      await this.deferQuestionCheck(
+        now,
+        "failure",
+        promptWhenAvailable,
+        nextAllowedPromptAt
+      );
       console.warn(JSON.stringify({
         event: "daily_question_check_failed",
         status: error instanceof ApiError ? error.status : undefined
@@ -179,7 +202,8 @@ export class DailyQuestionCoordinator {
   private async applyRemoteQuestion(
     remote: DailyQuestion,
     now: Date,
-    promptWhenAvailable: boolean
+    promptWhenAvailable: boolean,
+    nextAllowedPromptAt?: Date
   ): Promise<void> {
     const previous = this.store.daily();
     const cached = this.cachedFrom(remote);
@@ -216,7 +240,9 @@ export class DailyQuestionCoordinator {
       next.nextPromptAt = undefined;
       next.nextCheckAt = nextQuestionRetryAt(now, "poll", 0);
     } else {
-      const promptAt = next.nextPromptAt ?? nextMorningAt(now);
+      const promptAt = nextAllowedPromptAt?.toISOString() ??
+        next.nextPromptAt ??
+        nextMorningAt(now);
       next.nextPromptAt = promptAt;
       next.nextCheckAt = promptAt;
     }
@@ -232,7 +258,8 @@ export class DailyQuestionCoordinator {
   private async deferQuestionCheck(
     now: Date,
     kind: "not-found" | "failure",
-    promptWhenAvailable: boolean
+    promptWhenAvailable: boolean,
+    nextAllowedPromptAt?: Date
   ): Promise<void> {
     const next: DailyState = { ...this.store.daily() };
     next.checkFailures = kind === "failure" ? next.checkFailures + 1 : 0;
@@ -248,6 +275,9 @@ export class DailyQuestionCoordinator {
     if (shouldPromptCached && cached) {
       next.nextPromptAt = undefined;
       this.question = this.questionView(cached, next);
+    } else if (cached && nextAllowedPromptAt) {
+      next.nextPromptAt = nextAllowedPromptAt.toISOString();
+      next.nextCheckAt = next.nextPromptAt;
     }
     await this.store.setDaily(next);
     if (shouldPromptCached) this.callbacks.prompt();

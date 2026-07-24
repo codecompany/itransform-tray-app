@@ -23,13 +23,13 @@ export function notificationFor(kind: NativeNotificationKind): NativeNotificatio
       return {
         body: "Seu feedback foi enviado com sucesso.",
         required: false,
-        view: "feedback"
+        view: "feedbacks"
       };
     case "linked":
       return {
         body: "Este dispositivo foi vinculado ao iTransform Pulse.",
         required: false,
-        view: "feedback"
+        view: "feedbacks"
       };
   }
 }

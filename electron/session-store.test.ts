@@ -83,4 +83,25 @@ describe("encrypted session store", () => {
       lastAnswerStatus: "synced"
     });
   });
+
+  it("persists multiple quiet-hour windows in encrypted preferences", async () => {
+    const file = await sessionFile();
+    const store = new SessionStore(file, secureStorage);
+    await store.link("durable-token", tokens, profile);
+    await store.setQuietHours([
+      { start: "22:00", end: "07:00" },
+      { start: "12:00", end: "13:00" }
+    ]);
+
+    const persisted = await fs.readFile(file, "utf8");
+    expect(persisted).not.toContain("22:00");
+    expect(persisted).not.toContain("12:00");
+
+    const reopened = new SessionStore(file, secureStorage);
+    await reopened.load();
+    expect(reopened.quietHours()).toEqual([
+      { start: "12:00", end: "13:00" },
+      { start: "22:00", end: "07:00" }
+    ]);
+  });
 });
