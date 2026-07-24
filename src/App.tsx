@@ -253,7 +253,7 @@ function ReceivedView(): JSX.Element {
   }, []);
   if (!result && !error) return <PanelLoading label="Buscando feedbacks…" />;
   return (
-    <Page title="Feedbacks recebidos">
+    <section className="feedback-pane" aria-label="Feedbacks recebidos">
       {error && <ErrorNotice message={error} />}
       {result && !result.available && (
         <Empty icon="↙" title="Histórico ainda indisponível" text={result.message ?? "Tente novamente mais tarde."} />
@@ -265,6 +265,61 @@ function ReceivedView(): JSX.Element {
           <p>{feedback.message}</p>
         </article>
       ))}
+    </section>
+  );
+}
+
+function FeedbacksView({
+  session,
+  onChange
+}: {
+  session: SessionView;
+  onChange: (session: SessionView) => void;
+}): JSX.Element {
+  const [tab, setTab] = useState<"sent" | "received">("sent");
+  const sentEvents = session.events.filter((event) => event.kind === "feedback-sent");
+  return (
+    <Page title="Feedbacks">
+      <div className="tabs" role="tablist" aria-label="Feedbacks enviados e recebidos">
+        <button
+          type="button"
+          role="tab"
+          aria-selected={tab === "sent"}
+          className={tab === "sent" ? "active" : ""}
+          onClick={() => setTab("sent")}
+        >
+          Enviados
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={tab === "received"}
+          className={tab === "received" ? "active" : ""}
+          onClick={() => setTab("received")}
+        >
+          Recebidos
+        </button>
+      </div>
+      {tab === "sent" ? (
+        <>
+          <FeedbackView embedded onSent={onChange} />
+          <section className="sent-feedback-history" aria-label="Feedbacks enviados recentemente">
+            <h2>Enviados recentemente</h2>
+            {sentEvents.length === 0 ? (
+              <p>Nenhum feedback enviado neste dispositivo.</p>
+            ) : sentEvents.map((event) => (
+              <article className="event-row" key={event.id}>
+                <span className="event-dot feedback-sent" />
+                <div>
+                  <strong>{event.title}</strong>
+                  <p>{event.detail}</p>
+                  <time>{dateLabel(event.at)}</time>
+                </div>
+              </article>
+            ))}
+          </section>
+        </>
+      ) : <ReceivedView />}
     </Page>
   );
 }
@@ -277,14 +332,32 @@ function SettingsView({
   onChange: (session: SessionView) => void;
 }): JSX.Element {
   const profile = session.profile!;
+  const [quietHours, setQuietHours] = useState(session.quietHours);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [saved, setSaved] = useState(false);
 
   async function logout(): Promise<void> {
     if (!window.confirm("Deseja desvincular este dispositivo?")) return;
     onChange(await window.pulseTray.logout());
   }
 
+  async function saveQuietHours(): Promise<void> {
+    setBusy(true);
+    setError("");
+    setSaved(false);
+    try {
+      onChange(await window.pulseTray.saveQuietHours(quietHours));
+      setSaved(true);
+    } catch (reason) {
+      setError(messageOf(reason));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
-    <Page title="Configurações">
+    <Page title="Ajustes">
       <section className="profile-card">
         <div className="avatar">{profile.name.slice(0, 1).toUpperCase()}</div>
         <div><strong>{profile.name}</strong><span>{profile.position}</span></div>
@@ -296,11 +369,59 @@ function SettingsView({
         <div><dt>E-mail</dt><dd>{profile.email}</dd></div>
       </dl>
       <section className="settings-form">
-        <strong>Pergunta diária automática</strong>
+        <strong>Janelas de silêncio</strong>
         <p>
-          O iTransform Pulse verifica a pergunta no primeiro acesso e pela manhã. Se você pular,
-          ele perguntará novamente mais tarde.
+          Defina os períodos em que a pergunta diária não deve aparecer. Fora deles, o
+          iTransform Pulse escolhe o melhor momento automaticamente.
         </p>
+        <div className="quiet-hours-list">
+          {quietHours.map((window, index) => (
+            <div className="quiet-hours-row" key={`${index}-${window.start}-${window.end}`}>
+              <label>
+                <span>Início</span>
+                <input
+                  type="time"
+                  aria-label={`Início da janela ${index + 1}`}
+                  value={window.start}
+                  onChange={(event) => setQuietHours(quietHours.map((item, itemIndex) =>
+                    itemIndex === index ? { ...item, start: event.target.value } : item
+                  ))}
+                />
+              </label>
+              <label>
+                <span>Fim</span>
+                <input
+                  type="time"
+                  aria-label={`Fim da janela ${index + 1}`}
+                  value={window.end}
+                  onChange={(event) => setQuietHours(quietHours.map((item, itemIndex) =>
+                    itemIndex === index ? { ...item, end: event.target.value } : item
+                  ))}
+                />
+              </label>
+              <button
+                type="button"
+                className="icon-button"
+                aria-label={`Remover janela ${index + 1}`}
+                onClick={() => setQuietHours(quietHours.filter((_, itemIndex) => itemIndex !== index))}
+              >
+                ×
+              </button>
+            </div>
+          ))}
+        </div>
+        <button
+          type="button"
+          className="quiet-add"
+          onClick={() => setQuietHours([...quietHours, { start: "22:00", end: "07:00" }])}
+        >
+          + Adicionar janela
+        </button>
+        {error && <ErrorNotice message={error} />}
+        {saved && <div className="notice success" role="status">Janelas de silêncio salvas.</div>}
+        <button type="button" className="secondary" disabled={busy} onClick={saveQuietHours}>
+          {busy ? "Salvando…" : "Salvar janelas"}
+        </button>
       </section>
       <button className="danger-link" onClick={logout}>Fazer logout</button>
     </Page>
@@ -332,35 +453,81 @@ function Empty({ icon, title, text }: { icon: string; title: string; text: strin
   return <div className="empty"><span>{icon}</span><h2>{title}</h2><p>{text}</p></div>;
 }
 
-const navigation: Array<{ view: AppView; symbol: string; label: string }> = [
-  { view: "feedback", symbol: "+", label: "Feedback" },
-  { view: "received", symbol: "↙", label: "Recebidos" },
-  { view: "settings", symbol: "⚙", label: "Ajustes" }
-];
+function FeedbackIcon(): JSX.Element {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M4 5.5h16v11H9l-5 3v-14Z" />
+      <path d="M8 9h8M8 13h5" />
+    </svg>
+  );
+}
+
+function ManagerIcon(): JSX.Element {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <circle cx="9" cy="8" r="3" />
+      <path d="M3.5 19c.4-3.5 2.2-5.2 5.5-5.2s5.1 1.7 5.5 5.2M16 8h5M18.5 5.5v5" />
+    </svg>
+  );
+}
+
+function SettingsIcon(): JSX.Element {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M9.7 3.5h4.6l.7 2.3 2 .9 2.2-1.1 2.3 4-1.8 1.5v2.2l1.8 1.5-2.3 4-2.2-1.1-2 .9-.7 2.3H9.7L9 18.6l-2-.9-2.2 1.1-2.3-4 1.8-1.5v-2.2L2.5 9.6l2.3-4L7 6.7l2-.9.7-2.3Z" />
+      <circle cx="12" cy="12.2" r="3" />
+    </svg>
+  );
+}
 
 export default function App(): JSX.Element {
+  const surface = new URLSearchParams(window.location.search).get("surface") === "question"
+    ? "question"
+    : "panel";
   const [session, setSession] = useState<SessionView>();
-  const [view, setView] = useState<AppView>("feedback");
+  const [view, setView] = useState<AppView>(
+    surface === "question" ? "question" : "feedbacks"
+  );
   const [required, setRequired] = useState(false);
+  const [navigationKey, setNavigationKey] = useState(0);
   const [error, setError] = useState("");
 
   useEffect(() => {
     void window.pulseTray.bootstrap().then(setSession).catch((reason) => setError(messageOf(reason)));
     return window.pulseTray.onNavigate((next, isRequired) => {
+      if (surface === "question" && next !== "question") return;
+      if (surface === "panel" && next === "question") return;
+      void window.pulseTray.bootstrap().then(setSession).catch((reason) => setError(messageOf(reason)));
       setRequired(isRequired);
-      setView(isRequired ? "question" : next);
+      setView(next);
+      setNavigationKey((current) => current + 1);
     });
-  }, []);
+  }, [surface]);
 
   if (error) return <main className="fatal"><ErrorNotice message={error} /></main>;
   if (!session) return <PanelLoading label="Abrindo o iTransform Pulse…" />;
-  if (!session.linked) return <TokenScreen onLinked={setSession} />;
+  if (!session.linked) {
+    if (surface === "question") return <PanelLoading label="Aguardando a vinculação…" />;
+    return <TokenScreen onLinked={setSession} />;
+  }
 
-  if (view === "question") {
+  if (surface === "question") {
     return (
-      <main className={`question-stage ${required ? "required" : ""}`}>
+      <main className={`question-stage ${required ? "required" : ""}`} key={navigationKey}>
         <div className="question-stage-panel">
-          <img src={logo} className="question-logo" alt="iTransform" />
+          <header className="question-window-bar">
+            <img src={logo} className="question-logo" alt="iTransform" />
+            {!required && (
+              <button
+                type="button"
+                className="question-close"
+                aria-label="Fechar questão diária"
+                onClick={() => void window.pulseTray.dismissQuestion()}
+              >
+                ×
+              </button>
+            )}
+          </header>
           <QuestionView
             required={required}
             onAnswered={(next) => {
@@ -370,9 +537,8 @@ export default function App(): JSX.Element {
             onSkipped={(next) => {
               setSession(next);
               setRequired(false);
-              setView("feedback");
             }}
-            openFeedback={() => setView("feedback")}
+            openFeedback={() => void window.pulseTray.openFeedbacks()}
           />
         </div>
       </main>
@@ -384,25 +550,38 @@ export default function App(): JSX.Element {
       <aside className="sidebar">
         <img src={logo} alt="iTransform" />
         <nav aria-label="Navegação principal">
-          {navigation.map((item) => (
+          <button
+            className={view === "feedbacks" ? "active" : ""}
+            onClick={() => setView("feedbacks")}
+            title="Feedbacks"
+          >
+            <span><FeedbackIcon /></span>
+            Feedbacks
+          </button>
+          {session.profile?.isLeader && (
             <button
-              key={item.view}
-              className={view === item.view ? "active" : ""}
-              onClick={() => setView(item.view)}
-              title={item.label}
+              onClick={() => void window.pulseTray.openManagerHub()}
+              title="ManagerHub"
             >
-              <span>{item.symbol}</span>
-              {item.label}
+              <span><ManagerIcon /></span>
+              ManagerHub
             </button>
-          ))}
+          )}
+          <button
+            className={view === "settings" ? "active" : ""}
+            onClick={() => setView("settings")}
+            title="Ajustes"
+          >
+            <span><SettingsIcon /></span>
+            Ajustes
+          </button>
         </nav>
         <div className="user-mini" title={session.profile?.name}>
           {session.profile?.name.slice(0, 1).toUpperCase()}
         </div>
       </aside>
       <main className="content">
-        {view === "feedback" && <FeedbackView />}
-        {view === "received" && <ReceivedView />}
+        {view === "feedbacks" && <FeedbacksView session={session} onChange={setSession} />}
         {view === "settings" && <SettingsView session={session} onChange={setSession} />}
       </main>
     </div>

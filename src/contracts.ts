@@ -1,7 +1,6 @@
 export type AppView =
   | "question"
-  | "feedback"
-  | "received"
+  | "feedbacks"
   | "settings";
 
 export type EventKind = "system" | "feedback-sent" | "feedback-received";
@@ -24,6 +23,12 @@ export interface EmployeeProfile {
   managerId?: string;
   managerName?: string;
   startDate: string;
+  isLeader?: boolean;
+}
+
+export interface QuietHoursWindow {
+  start: string;
+  end: string;
 }
 
 export interface SessionView {
@@ -33,6 +38,7 @@ export interface SessionView {
   lastAnswerDate?: string;
   events: ActivityEvent[];
   receivedFeedbackAvailable: boolean;
+  quietHours: QuietHoursWindow[];
 }
 
 export interface QuestionChoice {
@@ -113,8 +119,12 @@ export interface PulseTrayApi {
   skipQuestion(): Promise<SessionView>;
   listEmployees(): Promise<EmployeeOption[]>;
   listFeedbackTaxonomy(): Promise<FeedbackTaxonomy>;
-  sendFeedback(draft: FeedbackDraft): Promise<void>;
+  sendFeedback(draft: FeedbackDraft): Promise<SessionView>;
   listReceivedFeedback(): Promise<ReceivedFeedbackResult>;
+  saveQuietHours(windows: QuietHoursWindow[]): Promise<SessionView>;
+  openManagerHub(): Promise<void>;
+  openFeedbacks(): Promise<void>;
+  dismissQuestion(): Promise<void>;
   logout(): Promise<SessionView>;
   onNavigate(callback: (view: AppView, required: boolean) => void): () => void;
 }

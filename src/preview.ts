@@ -11,7 +11,8 @@ const configured: SessionView = {
     email: "marina@itransform.example",
     position: "Product Designer",
     managerName: "Carlos Nunes",
-    startDate: "2025-02-10T00:00:00Z"
+    startDate: "2025-02-10T00:00:00Z",
+    isLeader: true
   },
   events: [
     {
@@ -29,13 +30,23 @@ const configured: SessionView = {
       at: new Date(Date.now() - 86_400_000).toISOString()
     }
   ],
-  receivedFeedbackAvailable: true
+  receivedFeedbackAvailable: true,
+  quietHours: [
+    { start: "12:00", end: "13:00" },
+    { start: "22:00", end: "07:00" }
+  ]
 };
 
 export function installPreviewBridge(): void {
   const preview = new URLSearchParams(location.search).get("preview");
   let state: SessionView = preview === "token"
-    ? { linked: false, configured: false, events: [], receivedFeedbackAvailable: false }
+    ? {
+        linked: false,
+        configured: false,
+        events: [],
+        receivedFeedbackAvailable: false,
+        quietHours: []
+      }
     : configured;
   window.pulseTray = {
     bootstrap: async () => state,
@@ -84,7 +95,7 @@ export function installPreviewBridge(): void {
         { id: "sub-2", indexId: "iat", indexKey: "IAT", parentId: "dim-2", name: "Segurança psicológica" }
       ]
     }),
-    sendFeedback: async () => undefined,
+    sendFeedback: async () => configured,
     listReceivedFeedback: async () => ({
       available: true,
       feedbacks: [{
@@ -96,8 +107,21 @@ export function installPreviewBridge(): void {
         message: "Sua condução tornou a conversa mais segura e objetiva."
       }]
     }),
+    saveQuietHours: async (quietHours) => {
+      state = { ...state, quietHours };
+      return state;
+    },
+    openManagerHub: async () => undefined,
+    openFeedbacks: async () => undefined,
+    dismissQuestion: async () => undefined,
     logout: async () => {
-      state = { linked: false, configured: false, events: [], receivedFeedbackAvailable: false };
+      state = {
+        linked: false,
+        configured: false,
+        events: [],
+        receivedFeedbackAvailable: false,
+        quietHours: []
+      };
       return state;
     },
     onNavigate: (callback) => {

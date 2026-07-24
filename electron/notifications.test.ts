@@ -15,7 +15,7 @@ describe("native notification policy", () => {
     expect(notice).toEqual({
       body: "Seu feedback foi enviado com sucesso.",
       required: false,
-      view: "feedback"
+      view: "feedbacks"
     });
     expect(notice.body).not.toContain("@");
   });
@@ -24,7 +24,7 @@ describe("native notification policy", () => {
     expect(notificationFor("linked")).toEqual({
       body: "Este dispositivo foi vinculado ao iTransform Pulse.",
       required: false,
-      view: "feedback"
+      view: "feedbacks"
     });
   });
 });

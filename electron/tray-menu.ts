@@ -3,8 +3,7 @@ import { PRODUCT_NAME } from "../src/product.js";
 
 export interface TrayMenuActions {
   openDailyQuestion(): void;
-  openFeedbackComposer(): void;
-  openReceivedFeedback(): void;
+  openFeedbacks(): void;
   openSettings(): void;
   quit(): void;
 }
@@ -15,10 +14,8 @@ export function createTrayMenuTemplate(
   return [
     { label: "Questão diária", click: actions.openDailyQuestion },
     { type: "separator" },
-    { label: "Enviar Feedback", click: actions.openFeedbackComposer },
-    { label: "Receber Feedback", click: actions.openReceivedFeedback },
-    { type: "separator" },
-    { label: "Configurações", click: actions.openSettings },
+    { label: "Feedbacks", click: actions.openFeedbacks },
+    { label: "Ajustes", click: actions.openSettings },
     { type: "separator" },
     { label: `Encerrar ${PRODUCT_NAME}`, click: actions.quit }
   ];

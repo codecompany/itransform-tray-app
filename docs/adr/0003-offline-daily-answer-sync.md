@@ -18,6 +18,9 @@ channel.
   state. The renderer never receives credentials or direct storage access.
 - An interactive first login checks immediately. A hidden login before 09:00
   waits until 09:00 local time; later logins check immediately.
+- Users configure one or more encrypted local quiet-hour windows rather than a
+  preferred delivery time. The question remains eligible for validation during
+  those windows, but prompting is deferred until the active window ends.
 - Skipping is an explicit snooze. Successive skips use bounded delays of 60,
   120, 180, and 240 minutes with jitter.
 - Selecting an answer writes an encrypted outbox entry through an atomic file

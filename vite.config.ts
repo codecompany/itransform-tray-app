@@ -24,6 +24,7 @@ export default defineConfig({
         "electron/answer-sync.ts",
         "electron/daily-question-coordinator.ts",
         "electron/notifications.ts",
+        "electron/quiet-hours.ts",
         "electron/question-state.ts",
         "electron/scheduler.ts",
         "electron/session-store.ts",

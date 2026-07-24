@@ -2,7 +2,8 @@ import { useEffect, useMemo, useState } from "react";
 import type {
   EmployeeOption,
   FeedbackDraft,
-  FeedbackTaxonomy
+  FeedbackTaxonomy,
+  SessionView
 } from "./contracts";
 
 const emptyDraft: FeedbackDraft = {
@@ -23,7 +24,13 @@ function ErrorNotice({ message }: { message: string }): JSX.Element {
   return <div className="notice error" role="alert">{message}</div>;
 }
 
-export default function FeedbackView(): JSX.Element {
+export default function FeedbackView({
+  embedded = false,
+  onSent
+}: {
+  embedded?: boolean;
+  onSent?: (session: SessionView) => void;
+}): JSX.Element {
   const [employees, setEmployees] = useState<EmployeeOption[]>([]);
   const [taxonomy, setTaxonomy] = useState<FeedbackTaxonomy>({
     indexes: [],
@@ -109,7 +116,7 @@ export default function FeedbackView(): JSX.Element {
     setBusy(true);
     setSubmitError("");
     try {
-      await window.pulseTray.sendFeedback(draft);
+      onSent?.(await window.pulseTray.sendFeedback(draft));
       setSent(true);
     } catch (reason) {
       setSubmitError(messageOf(reason));
@@ -120,8 +127,8 @@ export default function FeedbackView(): JSX.Element {
 
   if (sent) {
     return (
-      <section className="page">
-        <header className="page-header"><h1>Enviar feedback</h1></header>
+      <section className={embedded ? "feedback-pane" : "page"}>
+        <header className="page-header"><h2>Enviar feedback</h2></header>
         <div className="success-card">
           <span className="success-mark">✓</span>
           <h2>Seu feedback foi enviado com sucesso!</h2>
@@ -143,8 +150,8 @@ export default function FeedbackView(): JSX.Element {
   }
 
   return (
-    <section className="page">
-      <header className="page-header"><h1>Enviar feedback para alguém</h1></header>
+    <section className={embedded ? "feedback-pane" : "page"}>
+      <header className="page-header"><h2>Enviar feedback para alguém</h2></header>
       <form className="feedback-form" onSubmit={submit}>
         {!selectedEmployee ? (
           <div className="field recipient-search">

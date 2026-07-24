@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import App from "./App";
@@ -20,7 +20,8 @@ const linkedSession: SessionView = {
   configured: true,
   profile,
   events: [],
-  receivedFeedbackAvailable: false
+  receivedFeedbackAvailable: false,
+  quietHours: []
 };
 
 const feedbackTaxonomy = {
@@ -60,9 +61,22 @@ function api(overrides: Partial<PulseTrayApi> = {}): PulseTrayApi {
     skipQuestion: vi.fn().mockResolvedValue(linkedSession),
     listEmployees: vi.fn().mockResolvedValue([]),
     listFeedbackTaxonomy: vi.fn().mockResolvedValue({ indexes: [], dimensions: [] }),
-    sendFeedback: vi.fn().mockResolvedValue(undefined),
+    sendFeedback: vi.fn().mockResolvedValue(linkedSession),
     listReceivedFeedback: vi.fn().mockResolvedValue({ available: false, feedbacks: [] }),
-    logout: vi.fn().mockResolvedValue({ linked: false, configured: false, events: [], receivedFeedbackAvailable: false }),
+    saveQuietHours: vi.fn().mockImplementation(async (quietHours) => ({
+      ...linkedSession,
+      quietHours
+    })),
+    openManagerHub: vi.fn().mockResolvedValue(undefined),
+    openFeedbacks: vi.fn().mockResolvedValue(undefined),
+    dismissQuestion: vi.fn().mockResolvedValue(undefined),
+    logout: vi.fn().mockResolvedValue({
+      linked: false,
+      configured: false,
+      events: [],
+      receivedFeedbackAvailable: false,
+      quietHours: []
+    }),
     onNavigate: vi.fn().mockReturnValue(() => undefined),
     ...overrides
   };
@@ -70,6 +84,7 @@ function api(overrides: Partial<PulseTrayApi> = {}): PulseTrayApi {
 
 beforeEach(() => {
   vi.stubGlobal("confirm", vi.fn().mockReturnValue(true));
+  window.history.replaceState({}, "", "/");
 });
 
 describe("iTransform Pulse app", () => {
@@ -149,7 +164,19 @@ describe("iTransform Pulse app", () => {
     expect(screen.getByLabelText("Token de acesso")).toHaveValue("bad-token");
   });
 
-  it("keeps the daily question out of navigation and opens it only on an Electron event", async () => {
+  it("keeps the daily question out of the regular panel navigation", async () => {
+    const bridge = api();
+    window.pulseTray = bridge;
+    render(<App />);
+    expect(await screen.findByText("Enviar feedback para alguém")).toBeInTheDocument();
+    expect(bridge.getQuestion).not.toHaveBeenCalled();
+    expect(screen.queryByRole("button", { name: "Questão" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Feedbacks" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Ajustes" })).toBeInTheDocument();
+  });
+
+  it("renders the required daily question on its independent surface", async () => {
+    window.history.replaceState({}, "", "/?surface=question");
     let navigate: ((view: "question", required: boolean) => void) | undefined;
     const bridge = api({
       onNavigate: vi.fn((callback) => {
@@ -173,15 +200,11 @@ describe("iTransform Pulse app", () => {
     });
     window.pulseTray = bridge;
     render(<App />);
-    expect(await screen.findByText("Enviar feedback para alguém")).toBeInTheDocument();
-    expect(bridge.getQuestion).not.toHaveBeenCalled();
-    expect(screen.queryByRole("button", { name: "Questão" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Avisos" })).not.toBeInTheDocument();
-
-    navigate?.("question", true);
     expect(await screen.findByText("Tenho espaço para aprender com erros?")).toBeInTheDocument();
+    navigate?.("question", true);
     expect(await screen.findByText("Resposta necessária")).toBeInTheDocument();
     expect(screen.queryByRole("navigation")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Fechar questão diária" })).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole("radio", { name: /Concordo totalmente/ }));
     await userEvent.click(screen.getByRole("button", { name: "Confirmar resposta" }));
     expect(bridge.submitAnswer).toHaveBeenCalledWith({
@@ -193,13 +216,9 @@ describe("iTransform Pulse app", () => {
     expect(screen.getByText(/sincronizada automaticamente/)).toBeInTheDocument();
   });
 
-  it("lets the employee skip and returns to the regular experience", async () => {
-    let navigate: ((view: "question", required: boolean) => void) | undefined;
+  it("lets the employee skip from the independent question window", async () => {
+    window.history.replaceState({}, "", "/?surface=question");
     const bridge = api({
-      onNavigate: vi.fn((callback) => {
-        navigate = callback;
-        return () => undefined;
-      }),
       getQuestion: vi.fn().mockResolvedValue({
         employeeId: "employee-1",
         date: "2026-07-23",
@@ -214,52 +233,32 @@ describe("iTransform Pulse app", () => {
     });
     window.pulseTray = bridge;
     render(<App />);
-    await screen.findByText("Enviar feedback para alguém");
-
-    navigate?.("question", true);
+    await screen.findByText("Pergunta de teste?");
     await userEvent.click(await screen.findByRole("button", { name: "Pular por agora" }));
 
     expect(bridge.skipQuestion).toHaveBeenCalledOnce();
-    expect(await screen.findByText("Enviar feedback para alguém")).toBeInTheDocument();
   });
 
   it("shows the empty state for the daily question", async () => {
-    let navigate: ((view: "question", required: boolean) => void) | undefined;
-    const bridge = api({
-      onNavigate: vi.fn((callback) => {
-        navigate = callback;
-        return () => undefined;
-      })
-    });
-    window.pulseTray = bridge;
+    window.history.replaceState({}, "", "/?surface=question");
+    window.pulseTray = api();
     render(<App />);
-    await screen.findByText("Enviar feedback para alguém");
-    navigate?.("question", false);
     expect(await screen.findByText("Nada por enquanto")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Fechar questão diária" })).toBeInTheDocument();
   });
 
   it("shows an error when the daily question cannot be loaded", async () => {
-    let navigate: ((view: "question", required: boolean) => void) | undefined;
+    window.history.replaceState({}, "", "/?surface=question");
     window.pulseTray = api({
-      getQuestion: vi.fn().mockRejectedValue(new Error("Serviço indisponível")),
-      onNavigate: vi.fn((callback) => {
-        navigate = callback;
-        return () => undefined;
-      })
+      getQuestion: vi.fn().mockRejectedValue(new Error("Serviço indisponível"))
     });
     render(<App />);
-    await screen.findByText("Enviar feedback para alguém");
-    navigate?.("question", false);
     expect(await screen.findByRole("alert")).toHaveTextContent("Serviço indisponível");
   });
 
   it("keeps the selected answer available when submission fails", async () => {
-    let navigate: ((view: "question", required: boolean) => void) | undefined;
+    window.history.replaceState({}, "", "/?surface=question");
     const bridge = api({
-      onNavigate: vi.fn((callback) => {
-        navigate = callback;
-        return () => undefined;
-      }),
       getQuestion: vi.fn().mockResolvedValue({
         employeeId: "employee-1",
         date: "2026-07-23",
@@ -275,8 +274,6 @@ describe("iTransform Pulse app", () => {
     });
     window.pulseTray = bridge;
     render(<App />);
-    await screen.findByText("Enviar feedback para alguém");
-    navigate?.("question", true);
     const choice = await screen.findByRole("radio", { name: /Concordo parcialmente/ });
     await userEvent.click(choice);
     await userEvent.click(screen.getByRole("button", { name: "Confirmar resposta" }));
@@ -284,13 +281,9 @@ describe("iTransform Pulse app", () => {
     expect(choice).toHaveAttribute("aria-checked", "true");
   });
 
-  it("opens feedback from the completed daily question", async () => {
-    let navigate: ((view: "question", required: boolean) => void) | undefined;
-    window.pulseTray = api({
-      onNavigate: vi.fn((callback) => {
-        navigate = callback;
-        return () => undefined;
-      }),
+  it("opens the regular feedback panel from a completed daily question", async () => {
+    window.history.replaceState({}, "", "/?surface=question");
+    const bridge = api({
       getQuestion: vi.fn().mockResolvedValue({
         employeeId: "employee-1",
         date: "2026-07-23",
@@ -299,11 +292,10 @@ describe("iTransform Pulse app", () => {
         question: { id: "question-1", text: "Respondida", choices: [] }
       })
     });
+    window.pulseTray = bridge;
     render(<App />);
-    await screen.findByText("Enviar feedback para alguém");
-    navigate?.("question", false);
     await userEvent.click(await screen.findByRole("button", { name: "Enviar feedback" }));
-    expect(await screen.findByText("Enviar feedback para alguém")).toBeInTheDocument();
+    expect(bridge.openFeedbacks).toHaveBeenCalledOnce();
   });
 
   it("requires employee, index, dimension and subdimension in that order", async () => {
@@ -396,8 +388,20 @@ describe("iTransform Pulse app", () => {
   });
 
   it("shows the exact feedback success copy and prevents duplicate submits", async () => {
+    const sentSession: SessionView = {
+      ...linkedSession,
+      events: [{
+        id: "sent-1",
+        kind: "feedback-sent",
+        title: "Feedback enviado para Bruno Lima",
+        detail: "IAT · Confiança · importância 3",
+        at: "2026-07-24T12:00:00Z"
+      }]
+    };
     let resolveSend: (() => void) | undefined;
-    const sendFeedback = vi.fn(() => new Promise<void>((resolve) => { resolveSend = resolve; }));
+    const sendFeedback = vi.fn(() => new Promise<SessionView>((resolve) => {
+      resolveSend = () => resolve(sentSession);
+    }));
     const bridge = api({
       listEmployees: vi.fn().mockResolvedValue([
         { id: "employee-2", name: "Bruno Lima", email: "bruno@example.com", position: "Engenheiro" }
@@ -419,12 +423,13 @@ describe("iTransform Pulse app", () => {
     expect(sendFeedback).toHaveBeenCalledOnce();
     resolveSend?.();
     expect(await screen.findByText("Seu feedback foi enviado com sucesso!")).toBeInTheDocument();
+    expect(screen.getByText("Feedback enviado para Bruno Lima")).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Enviar outro feedback" }));
     expect(await screen.findByLabelText("Nome ou e-mail do colaborador")).toHaveValue("");
     expect(screen.queryByLabelText("Mensagem")).not.toBeInTheDocument();
   });
 
-  it("shows received feedback without an internal notification page", async () => {
+  it("groups sent and received feedback in tabs", async () => {
     const bridge = api({
       bootstrap: vi.fn().mockResolvedValue({
         ...linkedSession,
@@ -450,7 +455,13 @@ describe("iTransform Pulse app", () => {
     });
     window.pulseTray = bridge;
     render(<App />);
-    await userEvent.click(await screen.findByRole("button", { name: /Recebidos/ }));
+    expect(await screen.findByRole("tab", { name: "Enviados" })).toHaveAttribute(
+      "aria-selected",
+      "true"
+    );
+    expect(screen.getByText("Feedback enviado")).toBeInTheDocument();
+    expect(screen.getByText("Enviados recentemente")).toBeInTheDocument();
+    await userEvent.click(await screen.findByRole("tab", { name: "Recebidos" }));
     expect(await screen.findByText("Obrigado pela parceria.")).toBeInTheDocument();
     expect(screen.getByText("Bruno Lima")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Avisos/ })).not.toBeInTheDocument();
@@ -466,23 +477,62 @@ describe("iTransform Pulse app", () => {
     });
     window.pulseTray = bridge;
     const rendered = render(<App />);
-    await userEvent.click(await screen.findByRole("button", { name: /Recebidos/ }));
+    await userEvent.click(await screen.findByRole("tab", { name: "Recebidos" }));
     expect(await screen.findByText("Contrato ainda indisponível.")).toBeInTheDocument();
     rendered.unmount();
 
     window.pulseTray = api({ listReceivedFeedback: vi.fn().mockRejectedValue(new Error("Falha na consulta")) });
     render(<App />);
-    await userEvent.click(await screen.findByRole("button", { name: /Recebidos/ }));
+    await userEvent.click(await screen.findByRole("tab", { name: "Recebidos" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("Falha na consulta");
   });
 
-  it("explains the automatic daily-question policy in settings", async () => {
-    window.pulseTray = api();
+  it("saves multiple quiet-hour windows instead of a preferred question time", async () => {
+    const bridge = api();
+    window.pulseTray = bridge;
     render(<App />);
     await userEvent.click(await screen.findByRole("button", { name: /Ajustes/ }));
-    expect(await screen.findByText("Pergunta diária automática")).toBeInTheDocument();
-    expect(screen.getByText(/primeiro acesso e pela manhã/)).toBeInTheDocument();
-    expect(screen.queryByRole("textbox", { name: /Horário/ })).not.toBeInTheDocument();
+    expect(await screen.findByText("Janelas de silêncio")).toBeInTheDocument();
+    expect(screen.getByText(/não deve aparecer/)).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: /Adicionar janela/ }));
+    fireEvent.change(screen.getByLabelText("Início da janela 1"), {
+      target: { value: "12:00" }
+    });
+    fireEvent.change(screen.getByLabelText("Fim da janela 1"), {
+      target: { value: "13:30" }
+    });
+    await userEvent.click(screen.getByRole("button", { name: /Adicionar janela/ }));
+    await userEvent.click(screen.getByRole("button", { name: "Salvar janelas" }));
+
+    expect(bridge.saveQuietHours).toHaveBeenCalledWith([
+      { start: "12:00", end: "13:30" },
+      { start: "22:00", end: "07:00" }
+    ]);
+    expect(await screen.findByRole("status")).toHaveTextContent(
+      "Janelas de silêncio salvas."
+    );
+  });
+
+  it("shows ManagerHub only for leaders and opens the official address", async () => {
+    const leaderSession = {
+      ...linkedSession,
+      profile: { ...profile, isLeader: true }
+    };
+    const leaderBridge = api({
+      bootstrap: vi.fn().mockResolvedValue(leaderSession)
+    });
+    window.pulseTray = leaderBridge;
+    const rendered = render(<App />);
+
+    await userEvent.click(await screen.findByRole("button", { name: "ManagerHub" }));
+    expect(leaderBridge.openManagerHub).toHaveBeenCalledOnce();
+    rendered.unmount();
+
+    window.pulseTray = api();
+    render(<App />);
+    await screen.findByRole("button", { name: "Feedbacks" });
+    expect(screen.queryByRole("button", { name: "ManagerHub" })).not.toBeInTheDocument();
   });
 
   it("shows bootstrap errors", async () => {

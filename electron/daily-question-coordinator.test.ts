@@ -153,6 +153,19 @@ describe("daily question coordinator", () => {
       .toBe(new Date(2026, 6, 24, 9, 0, 0).toISOString());
   });
 
+  it("caches a question but defers its popup until quiet hours end", async () => {
+    const { callbacks, coordinator, store } = await setup();
+    const now = new Date(2026, 6, 24, 12, 30);
+    const quietEnd = new Date(2026, 6, 24, 13, 30);
+
+    await coordinator.check(now, false, quietEnd);
+
+    expect(callbacks.prompt).not.toHaveBeenCalled();
+    expect(store.daily().nextPromptAt).toBe(quietEnd.toISOString());
+    expect(store.daily().nextCheckAt).toBe(quietEnd.toISOString());
+    expect(coordinator.current()?.question.id).toBe("question-1");
+  });
+
   it("uses a cached question during an outage and preserves a queued answer", async () => {
     const { callbacks, coordinator, gateway, store } = await setup();
     const now = new Date(2026, 6, 24, 10, 0, 0);
