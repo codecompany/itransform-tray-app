@@ -34,9 +34,10 @@ Electron no pacote.
 - Janelas de silêncio locais e criptografadas substituem qualquer configuração
   de horário preferido. Durante esses intervalos a pergunta continua sendo
   validada, mas o popup é adiado até o fim do período.
-- O diretório de colaboradores é consultado antes das dimensões. O renderer só
-  revela os demais campos de feedback depois da seleção de um nome ou e-mail
-  retornado pela API oficial, e as duas consultas têm recuperação independente.
+- O diretório de colaboradores é consultado antes do compositor. O renderer só
+  revela o método e os campos guiados depois da seleção de um nome ou e-mail
+  retornado pela API oficial. Índice e dimensões não são escolhidos pelo
+  colaborador; a classificação ocorre de forma assíncrona no backend.
 - Lembretes e confirmações são enviados pelo sistema operacional. O conteúdo
   nativo é genérico e não contém token, nome, e-mail ou mensagem de feedback.
 - Clicar no ícone do tray abre somente o menu nativo. Apenas ações explícitas
@@ -85,11 +86,11 @@ checksum, staging e substituição atômica.
   usuário recebe os avisos pelo mecanismo nativo do sistema.
 - Novas operações precisam de canal IPC explícito e validação no processo
   principal.
-- Feedbacks recebidos só podem ser liberados quando houver uma rota oficial
-  autorizada para o colaborador.
+- Feedbacks enviados e recebidos usam a rota oficial autorizada para o
+  colaborador e ficam em abas separadas do compositor.
 
 ## Action Items
 
 1. Manter o teste de contrato entre a resposta de sessão e a vinculação pelo
    Employee ID.
-2. Disponibilizar a rota oficial de feedbacks recebidos.
+2. Manter testes de contrato para os históricos enviados e recebidos.

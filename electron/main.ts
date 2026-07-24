@@ -7,6 +7,7 @@ import {
   Notification,
   powerMonitor,
   safeStorage,
+  screen,
   session,
   shell,
   Tray
@@ -29,8 +30,7 @@ import { DailyScheduler } from "./scheduler.js";
 import {
   ApiError,
   PulseApiClient,
-  type AccessTokenBundle,
-  validateFeedbackSelection
+  type AccessTokenBundle
 } from "./pulse-api.js";
 import {
   notificationFor,
@@ -42,6 +42,7 @@ import { SessionStore } from "./session-store.js";
 import { createTrayMenuTemplate } from "./tray-menu.js";
 import { quietUntil, validateQuietHours } from "./quiet-hours.js";
 import { applyQuestionWindowMode } from "./window-mode.js";
+import { validateFeedbackDraft } from "./feedback-validation.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const client = new PulseApiClient();
@@ -65,7 +66,7 @@ function sessionView(): SessionView {
     profile: state.profile,
     lastAnswerDate: daily.lastAnswerDate,
     events: state.events,
-    receivedFeedbackAvailable: false,
+    receivedFeedbackAvailable: true,
     quietHours: [...store.quietHours()]
   };
 }
@@ -159,6 +160,16 @@ function loadRenderer(window: BrowserWindow, surface: "panel" | "question"): voi
 
 function showPanelWindow(view: Exclude<AppView, "question"> = "feedbacks"): void {
   if (!panelWindow || panelWindow.isDestroyed()) return;
+  const workArea = screen.getDisplayMatching(panelWindow.getBounds()).workAreaSize;
+  const preferred = view === "feedbacks"
+    ? { width: 760, height: 820 }
+    : { width: 520, height: 720 };
+  panelWindow.setSize(
+    Math.min(preferred.width, workArea.width - 32),
+    Math.min(preferred.height, workArea.height - 32),
+    true
+  );
+  panelWindow.center();
   panelWindow.show();
   panelWindow.focus();
   sendNavigation(panelWindow, view);
@@ -430,50 +441,28 @@ function registerIpc(): void {
     );
     return employees.filter((employee) => employee.id !== profile.id);
   });
-  ipcMain.handle("feedback:taxonomy", async (event) => {
-    trusted(event);
-    const profile = requireProfile();
-    return withAccessTokens((tokens) =>
-      client.listFeedbackTaxonomy(tokens.knowledgeToken, profile.companyId)
-    );
-  });
   ipcMain.handle("feedback:send", async (event, raw: unknown) => {
     trusted(event);
     if (feedbackInFlight) throw new Error("Seu feedback já está sendo enviado.");
-    const input = raw as Partial<FeedbackDraft>;
-    const draft: FeedbackDraft = {
-      toEmployeeId: stringValue(input.toEmployeeId, "Colaborador", 200),
-      indexId: stringValue(input.indexId, "Índice", 200),
-      dimensionId: stringValue(input.dimensionId, "Dimensão", 200),
-      subDimensionId: stringValue(input.subDimensionId, "Subdimensão", 200),
-      importance: Number(input.importance),
-      message: stringValue(input.message, "Mensagem", 400)
-    };
-    if (!Number.isInteger(draft.importance) || draft.importance < 1 || draft.importance > 5) {
-      throw new Error("A importância deve estar entre 1 e 5.");
-    }
+    const draft: FeedbackDraft = validateFeedbackDraft(raw);
     const profile = requireProfile();
     if (draft.toEmployeeId === profile.id) throw new Error("Selecione outro colaborador.");
     feedbackInFlight = true;
     try {
       const tokens = await accessTokens();
-      const [employees, taxonomy] = await Promise.all([
-        client.listEmployees(tokens.employeeToken, profile.companyId),
-        client.listFeedbackTaxonomy(tokens.knowledgeToken, profile.companyId)
-      ]);
+      const employees = await client.listEmployees(tokens.employeeToken, profile.companyId);
       const recipient = employees.find((employee) => employee.id === draft.toEmployeeId);
       if (!recipient) {
         throw new Error("O colaborador selecionado não está mais disponível. Atualize a lista.");
       }
-      const selection = validateFeedbackSelection(draft, taxonomy);
       await withAccessTokens((freshTokens) =>
         client.sendFeedback(freshTokens, profile, draft)
       );
       await store.addEvent(
         "feedback-sent",
         `Feedback enviado para ${recipient.name}`,
-        `${selection.index.key} · ${selection.dimension.name} · ` +
-        `${selection.subDimension.name} · importância ${draft.importance}`
+        `${draft.method === "situational" ? "Situacional" : "Desenvolvimento"} · ` +
+        `importância ${draft.importance}`
       );
       showNativeNotification("feedback-sent");
       return sessionView();
@@ -481,13 +470,16 @@ function registerIpc(): void {
       feedbackInFlight = false;
     }
   });
-  ipcMain.handle("feedback:received", (event) => {
+  ipcMain.handle("feedback:history", async (event, rawDirection: unknown) => {
     trusted(event);
-    return {
-      available: false,
-      feedbacks: [],
-      message: "O serviço iTransform ainda não expõe uma rota autorizada para feedbacks recebidos."
-    };
+    const direction = rawDirection === "sent" || rawDirection === "received"
+      ? rawDirection
+      : undefined;
+    if (!direction) throw new Error("Histórico de feedback inválido.");
+    const profile = requireProfile();
+    return withAccessTokens((tokens) =>
+      client.listFeedbackHistory(tokens, profile, direction)
+    );
   });
   ipcMain.handle("settings:quiet-hours", async (event, raw: unknown) => {
     trusted(event);

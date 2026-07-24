@@ -26,7 +26,7 @@ const configured: SessionView = {
       id: "event-2",
       kind: "feedback-sent",
       title: "Feedback enviado para Bruno Lima",
-      detail: "IPT · Aprendizado · importância 5",
+      detail: "Situacional · importância 5",
       at: new Date(Date.now() - 86_400_000).toISOString()
     }
   ],
@@ -83,28 +83,25 @@ export function installPreviewBridge(): void {
       { id: "employee-2", name: "Bruno Lima", email: "bruno@itransform.example", position: "Engenheiro" },
       { id: "employee-3", name: "Camila Rocha", email: "camila@itransform.example", position: "Analista" }
     ],
-    listFeedbackTaxonomy: async () => ({
-      indexes: [
-        { id: "ipt", key: "IPT", description: "Índice de Potencial de Transformação" },
-        { id: "iat", key: "IAT", description: "Índice de Ambiente de Trabalho" }
-      ],
-      dimensions: [
-        { id: "dim-1", indexId: "ipt", indexKey: "IPT", name: "Potencial" },
-        { id: "sub-1", indexId: "ipt", indexKey: "IPT", parentId: "dim-1", name: "Aprendizado" },
-        { id: "dim-2", indexId: "iat", indexKey: "IAT", name: "Confiança" },
-        { id: "sub-2", indexId: "iat", indexKey: "IAT", parentId: "dim-2", name: "Segurança psicológica" }
-      ]
-    }),
     sendFeedback: async () => configured,
-    listReceivedFeedback: async () => ({
-      available: true,
+    listFeedbackHistory: async (direction) => ({
       feedbacks: [{
         id: "feedback-1",
-        sender: "Camila Rocha",
+        person: direction === "sent" ? "Bruno Lima" : "Camila Rocha",
         date: new Date(Date.now() - 172_800_000).toISOString(),
-        subDimension: "Confiança",
         importance: 4,
-        message: "Sua condução tornou a conversa mais segura e objetiva."
+        method: "situational",
+        content: {
+          context: "Durante a reunião de planejamento",
+          observedBehavior: "Você organizou as decisões e confirmou os responsáveis.",
+          perceivedImpact: "O time saiu com clareza sobre os próximos passos.",
+          suggestedNextStep: "Continue reservando os minutos finais para esse resumo.",
+          continueDoing: "",
+          startDoing: "",
+          stopDoing: ""
+        },
+        message: "Feedback situacional",
+        analysisStatus: "completed"
       }]
     }),
     saveQuietHours: async (quietHours) => {

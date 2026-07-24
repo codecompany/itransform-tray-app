@@ -43,20 +43,21 @@ npm run smoke:npm
   autoritativa de que qualquer canal já respondeu naquele dia.
 - `POST /v1/pulse/answer/:employeeId` — preserva de forma idempotente somente a
   primeira resposta diária quando dois canais concorrem.
-- `POST /v1/pulse/feedbacks`
+- `POST /v1/pulse/feedbacks` — envia `method`, `value` e conteúdo estruturado;
+  índice e dimensões são classificados de forma assíncrona pelo backend.
+- `GET /v1/pulse/feedbacks/:employeeId?direction=sent|received`
 - `POST /v1/pulse/tray/access-requests`
 - `POST /v1/pulse/tray/session`
 - `GET /v1/employees/list?companyId&cursor&limit`
-- `GET /v1/indexes/list?companyId&cursor&limit`
-- `GET /v1/dimensions/list?companyId&cursor&limit`
 
 O token opaco recebido por e-mail é trocado no Pulse Service pelo Employee ID
 revalidado e por tokens oficiais das audiências Employee, Knowledge e Pulse.
 O processo principal usa esse ID para carregar o perfil e não interpreta claims
 não contratados dos access tokens. No feedback, o colaborador é localizado
-primeiro por nome ou e-mail; as subdimensões e os demais campos só aparecem
-após uma seleção válida. Falhas no diretório e nas subdimensões podem ser
-recuperadas de forma independente.
+primeiro por nome ou e-mail. Depois da seleção, a pessoa escolhe feedback
+situacional ou de desenvolvimento e recebe campos guiados para registrar fatos,
+comportamentos, impacto e ações. O aplicativo não solicita índice, dimensão ou
+subdimensão.
 
 A pergunta diária não ocupa uma aba. Ela é aberta pelo agendador ou manualmente
 pelo menu da área de notificação em uma janela separada, sem barra de título,
@@ -68,7 +69,8 @@ antes das 09:00 aguarda a manhã. **Agora não** usa atrasos crescentes, com
 jitter, persistidos localmente.
 
 Feedbacks enviados e recebidos compartilham a área Feedbacks, em abas
-separadas. A aba Enviados mantém o formulário e os registros locais recentes.
+separadas do compositor. As duas listas vêm do histórico autorizado do Pulse
+Service e não disputam espaço com o novo feedback.
 Para líderes, a navegação também exibe ManagerHub entre Feedbacks e Ajustes; o
 botão abre `https://itransform.cc` no navegador, sem compartilhar credenciais
 do aplicativo.
@@ -78,11 +80,9 @@ sem depender da disponibilidade do servidor. A sincronização sempre consulta
 `answered` antes de enviar. Falhas transitórias preservam a fila e usam backoff;
 uma resposta encontrada no Slack ou no e-mail encerra o item local sem
 sobrescrever o servidor. Lembretes e confirmações são notificações nativas do
-sistema, com texto genérico e sem conteúdo do feedback.
-A tela de recebidos continua
-apresentando indisponibilidade explícita enquanto não existir um contrato
-autorizado para esse histórico. Nenhuma rota alternativa, acesso a banco,
-datalake ou acesso direto ao Manager Hub é utilizado.
+sistema, com texto genérico e sem conteúdo do feedback. Nenhuma rota
+alternativa, acesso a banco, datalake ou acesso direto ao Manager Hub é
+utilizado.
 
 ## Distribuição
 
