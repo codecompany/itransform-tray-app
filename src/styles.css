@@ -359,6 +359,52 @@ textarea:focus {
   overflow: hidden auto;
 }
 
+.question-stage {
+  display: grid;
+  width: 100%;
+  min-height: 100%;
+  place-items: center;
+  overflow: hidden auto;
+  padding: 34px;
+  background:
+    linear-gradient(145deg, rgba(15, 30, 23, 0.97), rgba(28, 59, 49, 0.94) 58%, rgba(67, 103, 90, 0.9)),
+    url("./assets/login-abstract.svg") center / cover;
+}
+
+.question-stage-panel {
+  width: min(100%, 720px);
+  border: 1px solid rgba(255, 255, 255, 0.42);
+  border-radius: 24px;
+  padding: 24px;
+  background: rgba(245, 247, 246, 0.98);
+  box-shadow: 0 30px 90px rgba(0, 0, 0, 0.32);
+}
+
+.question-stage.required .question-stage-panel {
+  box-shadow: 0 34px 100px rgba(0, 0, 0, 0.4);
+}
+
+.question-logo {
+  display: block;
+  width: 138px;
+  height: auto;
+  margin: 0 0 8px 4px;
+}
+
+.question-stage .page {
+  min-height: 0;
+  padding: 20px 4px 4px;
+}
+
+.question-stage .page-header {
+  margin-inline: 20px;
+}
+
+.question-stage .question-card,
+.question-stage .success-card {
+  box-shadow: none;
+}
+
 .page {
   min-height: 100%;
   padding: 28px 28px 36px;
@@ -515,6 +561,59 @@ textarea:focus {
   gap: 7px;
 }
 
+.recipient-search {
+  z-index: 4;
+}
+
+.field-status {
+  color: var(--muted);
+  font-size: 0.7rem;
+}
+
+.field-recovery {
+  display: grid;
+  gap: 8px;
+}
+
+.field-recovery .secondary {
+  width: 100%;
+}
+
+.selected-recipient {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border: 1px solid #c9ddd5;
+  border-radius: 12px;
+  padding: 12px 13px;
+  background: #f2f8f5;
+}
+
+.selected-recipient > div {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.selected-recipient strong {
+  font-size: 0.8rem;
+}
+
+.selected-recipient span {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 0.69rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.selected-recipient .text-button {
+  flex: 0 0 auto;
+  margin: 0;
+}
+
 .label-row {
   display: flex;
   align-items: center;
@@ -565,6 +664,14 @@ textarea:focus {
   font-size: 0.67rem;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.search-empty {
+  margin: 0;
+  padding: 13px;
+  color: var(--muted);
+  font-size: 0.72rem;
+  text-align: center;
 }
 
 .importance {
@@ -831,5 +938,14 @@ textarea:focus {
   .question-card,
   .feedback-form {
     padding: 18px;
+  }
+
+  .question-stage {
+    padding: 14px;
+  }
+
+  .question-stage-panel {
+    border-radius: 18px;
+    padding: 14px;
   }
 }

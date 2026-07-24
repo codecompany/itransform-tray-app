@@ -2,7 +2,8 @@
 
 Aplicativo Electron compacto do Sintonia para a pergunta diária e feedbacks.
 Ele permanece na área de notificação, inicia com o sistema e abre a pergunta
-no horário escolhido pelo colaborador.
+em tela cheia no horário escolhido pelo colaborador. A janela não pode ser
+fechada ou minimizada até a API aceitar a resposta.
 
 ## Desenvolvimento
 
@@ -39,12 +40,22 @@ npm run smoke:npm
 - `POST /v1/pulse/feedbacks`
 - `POST /v1/pulse/tray/access-requests`
 - `POST /v1/pulse/tray/session`
-- consultas autorizadas de colaboradores, índices e dimensões
+- `GET /v1/employees/list?companyId&cursor&limit`
+- `GET /v1/indexes/list?companyId&cursor&limit`
+- `GET /v1/dimensions/list?companyId&cursor&limit`
 
 O token opaco recebido por e-mail é trocado no Pulse Service pelo Employee ID
 revalidado e por tokens oficiais das audiências Employee, Knowledge e Pulse.
 O processo principal usa esse ID para carregar o perfil e não interpreta claims
-não contratados dos access tokens. A tela de recebidos continua
+não contratados dos access tokens. No feedback, o colaborador é localizado
+primeiro por nome ou e-mail; as subdimensões e os demais campos só aparecem
+após uma seleção válida. Falhas no diretório e nas subdimensões podem ser
+recuperadas de forma independente.
+
+A pergunta diária não ocupa uma aba. Ela é aberta pelo agendador ou
+manualmente pelo menu da área de notificação. Lembretes e confirmações são
+notificações nativas do sistema, com texto genérico e sem conteúdo do feedback.
+A tela de recebidos continua
 apresentando indisponibilidade explícita enquanto não existir um contrato
 autorizado para esse histórico. Nenhuma rota alternativa, acesso a banco,
 datalake ou Manager Hub é utilizado.

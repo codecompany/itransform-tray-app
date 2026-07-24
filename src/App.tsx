@@ -1,11 +1,9 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import logo from "./assets/logo-iTransform.png";
+import FeedbackView from "./FeedbackView";
 import type {
   AppView,
   DailyQuestion,
-  EmployeeOption,
-  FeedbackDimension,
-  FeedbackDraft,
   ReceivedFeedbackResult,
   SessionView
 } from "./contracts";
@@ -265,176 +263,6 @@ function QuestionView({
   );
 }
 
-function FeedbackView(): JSX.Element {
-  const [employees, setEmployees] = useState<EmployeeOption[]>([]);
-  const [dimensions, setDimensions] = useState<FeedbackDimension[]>([]);
-  const [query, setQuery] = useState("");
-  const [draft, setDraft] = useState<FeedbackDraft>({
-    toEmployeeId: "",
-    subDimensionId: "",
-    importance: 3,
-    message: ""
-  });
-  const [busy, setBusy] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-  const [sent, setSent] = useState(false);
-
-  useEffect(() => {
-    void Promise.all([window.pulseTray.listEmployees(), window.pulseTray.listFeedbackDimensions()])
-      .then(([people, items]) => {
-        setEmployees(people);
-        setDimensions(items);
-      })
-      .catch((reason) => setError(messageOf(reason)))
-      .finally(() => setLoading(false));
-  }, []);
-
-  const filtered = useMemo(() => {
-    const normalized = query.trim().toLocaleLowerCase("pt-BR");
-    if (!normalized) return [];
-    return employees
-      .filter((employee) =>
-        `${employee.name} ${employee.email} ${employee.position}`.toLocaleLowerCase("pt-BR").includes(normalized)
-      )
-      .slice(0, 6);
-  }, [employees, query]);
-  const selectedEmployee = employees.find((employee) => employee.id === draft.toEmployeeId);
-
-  async function submit(event: React.FormEvent): Promise<void> {
-    event.preventDefault();
-    if (busy) return;
-    setBusy(true);
-    setError("");
-    try {
-      await window.pulseTray.sendFeedback(draft);
-      setSent(true);
-    } catch (reason) {
-      setError(messageOf(reason));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  if (loading) return <PanelLoading label="Preparando o formulário…" />;
-  if (sent) {
-    return (
-      <Page title="Enviar feedback">
-        <div className="success-card">
-          <span className="success-mark">✓</span>
-          <h2>Seu feedback foi enviado com sucesso!</h2>
-          <p>O Sintonia cuidará da entrega e do impacto analítico.</p>
-          <button
-            className="secondary"
-            onClick={() => {
-              setDraft({ toEmployeeId: "", subDimensionId: "", importance: 3, message: "" });
-              setQuery("");
-              setSent(false);
-            }}
-          >
-            Enviar outro feedback
-          </button>
-        </div>
-      </Page>
-    );
-  }
-
-  return (
-    <Page title="Enviar feedback para alguém">
-      <form className="feedback-form" onSubmit={submit}>
-        <div className="field">
-          <label htmlFor="employee-search">Colaborador</label>
-          <input
-            id="employee-search"
-            value={selectedEmployee ? selectedEmployee.name : query}
-            onChange={(event) => {
-              setQuery(event.target.value);
-              setDraft({ ...draft, toEmployeeId: "" });
-            }}
-            placeholder="Busque por nome, e-mail ou cargo"
-            autoComplete="off"
-          />
-          {!selectedEmployee && filtered.length > 0 && (
-            <div className="search-results">
-              {filtered.map((employee) => (
-                <button
-                  type="button"
-                  key={employee.id}
-                  onClick={() => {
-                    setDraft({ ...draft, toEmployeeId: employee.id });
-                    setQuery(employee.name);
-                  }}
-                >
-                  <strong>{employee.name}</strong>
-                  <span>{employee.position} · {employee.email}</span>
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-        <div className="field">
-          <label htmlFor="dimension">Subdimensão de IPT ou IAT</label>
-          <select
-            id="dimension"
-            value={draft.subDimensionId}
-            onChange={(event) => setDraft({ ...draft, subDimensionId: event.target.value })}
-            required
-          >
-            <option value="">Selecione uma subdimensão</option>
-            {["IPT", "IAT"].map((index) => (
-              <optgroup label={index} key={index}>
-                {dimensions.filter((dimension) => dimension.indexKey === index).map((dimension) => (
-                  <option value={dimension.id} key={dimension.id}>{dimension.name}</option>
-                ))}
-              </optgroup>
-            ))}
-          </select>
-        </div>
-        <fieldset className="importance">
-          <legend>Importância</legend>
-          <div>
-            {[1, 2, 3, 4, 5].map((value) => (
-              <button
-                type="button"
-                aria-label={`Importância ${value} de 5`}
-                aria-pressed={draft.importance === value}
-                className={draft.importance === value ? "selected" : ""}
-                onClick={() => setDraft({ ...draft, importance: value })}
-                key={value}
-              >
-                {value}
-              </button>
-            ))}
-          </div>
-          <small>1 = menor importância · 5 = maior importância</small>
-        </fieldset>
-        <div className="field">
-          <div className="label-row">
-            <label htmlFor="message">Mensagem</label>
-            <span>{draft.message.length}/400</span>
-          </div>
-          <textarea
-            id="message"
-            value={draft.message}
-            onChange={(event) => setDraft({ ...draft, message: event.target.value })}
-            maxLength={400}
-            rows={5}
-            placeholder="Escreva uma mensagem clara e respeitosa."
-            required
-          />
-        </div>
-        {error && <ErrorNotice message={error} />}
-        <button
-          className="primary"
-          disabled={busy || !draft.toEmployeeId || !draft.subDimensionId || !draft.message.trim()}
-        >
-          {busy ? "Enviando…" : "Enviar feedback"}
-        </button>
-      </form>
-    </Page>
-  );
-}
-
 function ReceivedView(): JSX.Element {
   const [result, setResult] = useState<ReceivedFeedbackResult>();
   const [error, setError] = useState("");
@@ -453,25 +281,6 @@ function ReceivedView(): JSX.Element {
           <div><strong>{feedback.sender ?? "Anônimo"}</strong><time>{dateLabel(feedback.date)}</time></div>
           <span>{feedback.subDimension} · importância {feedback.importance}</span>
           <p>{feedback.message}</p>
-        </article>
-      ))}
-    </Page>
-  );
-}
-
-function NotificationsView({ session }: { session: SessionView }): JSX.Element {
-  return (
-    <Page title="Notificações">
-      {session.events.length === 0 ? (
-        <Empty icon="•" title="Sem notificações" text="Os eventos importantes do PulseTray aparecerão aqui." />
-      ) : session.events.map((event) => (
-        <article className="event-row" key={event.id}>
-          <span className={`event-dot ${event.kind}`} />
-          <div>
-            <strong>{event.title}</strong>
-            <p>{event.detail}</p>
-            <time>{new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short" }).format(new Date(event.at))}</time>
-          </div>
         </article>
       ))}
     </Page>
@@ -559,16 +368,14 @@ function Empty({ icon, title, text }: { icon: string; title: string; text: strin
 }
 
 const navigation: Array<{ view: AppView; symbol: string; label: string }> = [
-  { view: "question", symbol: "?", label: "Questão" },
   { view: "feedback", symbol: "+", label: "Feedback" },
   { view: "received", symbol: "↙", label: "Recebidos" },
-  { view: "notifications", symbol: "•", label: "Avisos" },
   { view: "settings", symbol: "⚙", label: "Ajustes" }
 ];
 
 export default function App(): JSX.Element {
   const [session, setSession] = useState<SessionView>();
-  const [view, setView] = useState<AppView>("question");
+  const [view, setView] = useState<AppView>("feedback");
   const [required, setRequired] = useState(false);
   const [error, setError] = useState("");
 
@@ -585,6 +392,24 @@ export default function App(): JSX.Element {
   if (!session.linked) return <TokenScreen onLinked={setSession} />;
   if (!session.configured) return <ScheduleScreen session={session} onSaved={setSession} />;
 
+  if (view === "question") {
+    return (
+      <main className={`question-stage ${required ? "required" : ""}`}>
+        <div className="question-stage-panel">
+          <img src={logo} className="question-logo" alt="iTransform" />
+          <QuestionView
+            required={required}
+            onAnswered={(next) => {
+              setSession(next);
+              setRequired(false);
+            }}
+            openFeedback={() => setView("feedback")}
+          />
+        </div>
+      </main>
+    );
+  }
+
   return (
     <div className="app-shell">
       <aside className="sidebar">
@@ -594,9 +419,8 @@ export default function App(): JSX.Element {
             <button
               key={item.view}
               className={view === item.view ? "active" : ""}
-              onClick={() => !required && setView(item.view)}
-              disabled={required && item.view !== "question"}
-              title={required && item.view !== "question" ? "Responda à pergunta diária para continuar" : item.label}
+              onClick={() => setView(item.view)}
+              title={item.label}
             >
               <span>{item.symbol}</span>
               {item.label}
@@ -608,19 +432,8 @@ export default function App(): JSX.Element {
         </div>
       </aside>
       <main className="content">
-        {view === "question" && (
-          <QuestionView
-            required={required}
-            onAnswered={(next) => {
-              setSession(next);
-              setRequired(false);
-            }}
-            openFeedback={() => setView("feedback")}
-          />
-        )}
         {view === "feedback" && <FeedbackView />}
         {view === "received" && <ReceivedView />}
-        {view === "notifications" && <NotificationsView session={session} />}
         {view === "settings" && <SettingsView session={session} onChange={setSession} />}
       </main>
     </div>

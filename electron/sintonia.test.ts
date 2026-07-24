@@ -137,7 +137,7 @@ describe("SintoniaClient", () => {
         },
         {
           id: "1", firstName: "Ana", lastName: "Lima", email: "a@example.com",
-          position: "Design", status: "active", companyId: "c", userId: "u", startDate: ""
+          position: "Design", status: " ACTIVE ", companyId: "c", userId: "u", startDate: ""
         },
         {
           id: "3", firstName: "Bruno", lastName: "Melo", email: "b@example.com",
@@ -147,6 +147,13 @@ describe("SintoniaClient", () => {
     })));
     const employees = await new SintoniaClient("https://example.test").listEmployees("token", "c 1");
     expect(employees.map((employee) => employee.name)).toEqual(["Ana Lima", "Bruno Melo"]);
+  });
+
+  it("rejects an employee-directory request without a company ID", async () => {
+    vi.stubGlobal("fetch", vi.fn());
+    await expect(new SintoniaClient("https://example.test").listEmployees("token", " "))
+      .rejects.toMatchObject({ code: "COMPANY_ID_MISSING", status: 400 });
+    expect(fetch).not.toHaveBeenCalled();
   });
 
   it("follows employee pagination until nextCursor is exhausted", async () => {
