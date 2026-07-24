@@ -807,6 +807,12 @@ textarea:focus {
   width: 100%;
 }
 
+.wizard-secondary-actions {
+  display: grid;
+  grid-template-columns: minmax(80px, 0.8fr) minmax(100px, 1fr);
+  gap: 8px;
+}
+
 .selected-recipient-wizard {
   min-height: 76px;
   padding: 16px;

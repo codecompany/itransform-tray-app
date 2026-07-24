@@ -204,13 +204,14 @@ describe("iTransform Pulse app", () => {
     expect(screen.queryByRole("navigation")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Fechar questão diária" })).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole("radio", { name: /Concordo totalmente/ }));
+    expect(bridge.submitAnswer).not.toHaveBeenCalled();
     await userEvent.click(screen.getByRole("button", { name: "Confirmar resposta" }));
     expect(bridge.submitAnswer).toHaveBeenCalledWith({
       questionId: "question-1",
       value: "5",
       date: "2026-07-23"
     });
-    expect(await screen.findByText("Não há mensagens para exibir.")).toBeInTheDocument();
+    expect(await screen.findByText("A pergunta de hoje já foi respondida.")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Enviar feedback" })).not.toBeInTheDocument();
   });
 
@@ -237,11 +238,11 @@ describe("iTransform Pulse app", () => {
     expect(bridge.skipQuestion).toHaveBeenCalledOnce();
   });
 
-  it("shows the empty state for the daily question", async () => {
+  it("shows that no daily question is available", async () => {
     window.history.replaceState({}, "", "/?surface=question");
     window.pulseTray = api();
     render(<App />);
-    expect(await screen.findByText("Não há mensagens para exibir.")).toBeInTheDocument();
+    expect(await screen.findByText("Não há pergunta disponível para hoje.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Fechar questão diária" })).toBeInTheDocument();
   });
 
@@ -292,10 +293,32 @@ describe("iTransform Pulse app", () => {
     });
     window.pulseTray = bridge;
     render(<App />);
-    expect(await screen.findByText("Não há mensagens para exibir.")).toBeInTheDocument();
+    expect(await screen.findByText("A pergunta de hoje já foi respondida.")).toBeInTheDocument();
     expect(screen.queryByText("Obrigado por compartilhar seu pulso de hoje.")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Enviar feedback" })).not.toBeInTheDocument();
     expect(bridge.openFeedbacks).not.toHaveBeenCalled();
+  });
+
+  it("cancels and clears the feedback wizard without submitting", async () => {
+    const bridge = api({
+      listEmployees: vi.fn().mockResolvedValue([
+        { id: "employee-2", name: "Bruno Lima", email: "bruno@example.com", position: "Engenheiro" }
+      ])
+    });
+    window.pulseTray = bridge;
+    render(<App />);
+
+    await selectRecipient();
+    await chooseMethod("situacional");
+    await userEvent.type(
+      screen.getByLabelText("Contexto ou fato observado *"),
+      "Conteúdo que deve ser descartado"
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Cancelar" }));
+
+    expect(await screen.findByLabelText("Nome ou e-mail do colaborador")).toHaveValue("");
+    expect(screen.getByRole("progressbar")).toHaveAttribute("aria-valuenow", "1");
+    expect(bridge.sendFeedback).not.toHaveBeenCalled();
   });
 
   it("asks for a recipient and feedback method without exposing internal taxonomy", async () => {

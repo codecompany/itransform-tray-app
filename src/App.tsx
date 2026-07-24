@@ -177,10 +177,17 @@ function QuestionView({
 
   if (error && !question) return <Page title="Questão diária"><ErrorNotice message={error} /></Page>;
   if (question === undefined) return <PanelLoading label="Buscando a pergunta de hoje…" />;
-  if (!question || question.answered) {
+  if (!question) {
     return (
       <Page title="Questão diária">
-        <div className="empty"><p>Não há mensagens para exibir.</p></div>
+        <div className="empty"><p>Não há pergunta disponível para hoje.</p></div>
+      </Page>
+    );
+  }
+  if (question.answered) {
+    return (
+      <Page title="Questão diária">
+        <div className="empty"><p>A pergunta de hoje já foi respondida.</p></div>
       </Page>
     );
   }
