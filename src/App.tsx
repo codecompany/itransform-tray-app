@@ -598,10 +598,15 @@ export default function App(): JSX.Element {
           </button>
           {session.profile?.isLeader && (
             <button
+              className="external-navigation"
               onClick={() => void window.pulseTray.openManagerHub()}
-              title="ManagerHub"
+              title="Abrir ManagerHub no navegador"
+              aria-label="Abrir ManagerHub no navegador"
             >
-              <span><ManagerIcon /></span>
+              <span>
+                <ManagerIcon />
+                <span className="external-link-badge" aria-hidden="true">↗</span>
+              </span>
               ManagerHub
             </button>
           )}
