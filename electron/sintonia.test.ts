@@ -151,6 +151,29 @@ describe("SintoniaClient", () => {
       .resolves.toBeNull();
   });
 
+  it("maps the authoritative answer state from the Pulse service", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(response({
+      employeeId: "employee-1",
+      date: "2026-07-24",
+      answered: true,
+      question: { id: "question-1", text: "Pergunta?", choices: [] }
+    })));
+
+    await expect(new SintoniaClient("https://example.test").getQuestion("token", "employee-1"))
+      .resolves.toMatchObject({ answered: true, answerStatus: "external" });
+  });
+
+  it("keeps compatibility when the answer field is absent", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(response({
+      employeeId: "employee-1",
+      date: "2026-07-24",
+      question: { id: "question-1", text: "Pergunta?", choices: [] }
+    })));
+
+    await expect(new SintoniaClient("https://example.test").getQuestion("token", "employee-1"))
+      .resolves.toMatchObject({ answered: false, answerStatus: "unanswered" });
+  });
+
   it("submits the exact Pulse answer contract", async () => {
     const fetchMock = vi.fn().mockResolvedValue(response({ status: "answer submitted successfully" }));
     vi.stubGlobal("fetch", fetchMock);

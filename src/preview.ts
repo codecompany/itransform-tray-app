@@ -13,7 +13,6 @@ const configured: SessionView = {
     managerName: "Carlos Nunes",
     startDate: "2025-02-10T00:00:00Z"
   },
-  dailyTime: "09:00",
   events: [
     {
       id: "event-1",
@@ -44,17 +43,14 @@ export function installPreviewBridge(): void {
       message: "Se o e-mail estiver vinculado a um colaborador ativo, o token será enviado em instantes."
     }),
     link: async () => {
-      state = { ...configured, configured: false, dailyTime: undefined };
-      return state;
-    },
-    saveDailyTime: async (time) => {
-      state = { ...configured, dailyTime: time };
+      state = configured;
       return state;
     },
     getQuestion: async () => ({
       employeeId: "employee-preview",
       date: new Date().toISOString().slice(0, 10),
       answered: false,
+      answerStatus: "unanswered",
       question: {
         id: "question-preview",
         text: "Sinto que tenho espaço para aprender e testar novas ideias no meu trabalho?",
@@ -71,6 +67,7 @@ export function installPreviewBridge(): void {
       state = { ...state, lastAnswerDate: new Date().toISOString().slice(0, 10) };
       return state;
     },
+    skipQuestion: async () => state,
     listEmployees: async () => [
       { id: "employee-2", name: "Bruno Lima", email: "bruno@sintonia.example", position: "Engenheiro" },
       { id: "employee-3", name: "Camila Rocha", email: "camila@sintonia.example", position: "Analista" }
@@ -103,6 +100,9 @@ export function installPreviewBridge(): void {
       state = { linked: false, configured: false, events: [], receivedFeedbackAvailable: false };
       return state;
     },
-    onNavigate: () => () => undefined
+    onNavigate: (callback) => {
+      if (preview === "question") queueMicrotask(() => callback("question", true));
+      return () => undefined;
+    }
   } satisfies PulseTrayApi;
 }

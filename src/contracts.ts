@@ -30,7 +30,6 @@ export interface SessionView {
   linked: boolean;
   configured: boolean;
   profile?: EmployeeProfile;
-  dailyTime?: string;
   lastAnswerDate?: string;
   events: ActivityEvent[];
   receivedFeedbackAvailable: boolean;
@@ -41,6 +40,8 @@ export interface QuestionChoice {
   label: string;
 }
 
+export type AnswerStatus = "unanswered" | "pending-sync" | "synced" | "external";
+
 export interface DailyQuestion {
   employeeId: string;
   date: string;
@@ -50,6 +51,7 @@ export interface DailyQuestion {
     choices: QuestionChoice[];
   };
   answered: boolean;
+  answerStatus: AnswerStatus;
 }
 
 export interface EmployeeOption {
@@ -106,9 +108,9 @@ export interface PulseTrayApi {
   bootstrap(): Promise<SessionView>;
   requestAccess(email: string): Promise<{ message: string }>;
   link(token: string): Promise<SessionView>;
-  saveDailyTime(time: string): Promise<SessionView>;
   getQuestion(): Promise<DailyQuestion | null>;
   submitAnswer(input: { questionId: string; value: string; date: string }): Promise<SessionView>;
+  skipQuestion(): Promise<SessionView>;
   listEmployees(): Promise<EmployeeOption[]>;
   listFeedbackTaxonomy(): Promise<FeedbackTaxonomy>;
   sendFeedback(draft: FeedbackDraft): Promise<void>;

@@ -3,8 +3,7 @@ import type { AppView } from "../src/contracts.js";
 export type NativeNotificationKind =
   | "daily-question"
   | "feedback-sent"
-  | "linked"
-  | "schedule-updated";
+  | "linked";
 
 export interface NativeNotificationPolicy {
   body: string;
@@ -12,10 +11,7 @@ export interface NativeNotificationPolicy {
   view: AppView;
 }
 
-export function notificationFor(
-  kind: NativeNotificationKind,
-  detail?: string
-): NativeNotificationPolicy {
+export function notificationFor(kind: NativeNotificationKind): NativeNotificationPolicy {
   switch (kind) {
     case "daily-question":
       return {
@@ -34,14 +30,6 @@ export function notificationFor(
         body: "Este dispositivo foi vinculado ao Sintonia.",
         required: false,
         view: "feedback"
-      };
-    case "schedule-updated":
-      return {
-        body: detail
-          ? `A pergunta diária será exibida às ${detail}.`
-          : "Horário da pergunta diária atualizado.",
-        required: false,
-        view: "settings"
       };
   }
 }

@@ -27,8 +27,9 @@ Electron no pacote.
   de forma explícita.
 - A pergunta diária não faz parte da navegação persistente. Quando o agendador
   encontra uma pergunta disponível, o processo principal abre uma janela em
-  tela cheia, não minimizável e não fechável até a API aceitar a resposta. O
-  menu do tray mantém um acesso manual à mesma experiência.
+  tela cheia. O colaborador pode responder ou adiá-la; o processo principal
+  controla a próxima tentativa. O menu do tray mantém um acesso manual à mesma
+  experiência.
 - O diretório de colaboradores é consultado antes das dimensões. O renderer só
   revela os demais campos de feedback depois da seleção de um nome ou e-mail
   retornado pela API oficial, e as duas consultas têm recuperação independente.
@@ -56,9 +57,10 @@ checksum, staging e substituição atômica.
 
 - APIs e credenciais ficam fora do contexto DOM.
 - A vinculação não depende de e-mail ou Employee ID dentro do JWT de Employee.
-- A janela obrigatória continua ativa após tentativas de fechamento.
-- A janela obrigatória volta ao modo de tela cheia após uma tentativa de saída e
-  só restaura o modo normal depois de uma resposta aceita.
+- A janela obrigatória continua ativa após tentativas de fechamento ou saída do
+  modo de tela cheia, exceto quando o colaborador escolhe adiá-la.
+- A resposta é considerada aceita pela interface depois da gravação local
+  criptografada; a confirmação do servidor ocorre em segundo plano.
 - O histórico interno não é apresentado como uma central de notificações; o
   usuário recebe os avisos pelo mecanismo nativo do sistema.
 - Novas operações precisam de canal IPC explícito e validação no processo

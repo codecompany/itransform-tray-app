@@ -19,7 +19,6 @@ const linkedSession: SessionView = {
   linked: true,
   configured: true,
   profile,
-  dailyTime: "09:00",
   events: [],
   receivedFeedbackAvailable: false
 };
@@ -55,10 +54,10 @@ function api(overrides: Partial<PulseTrayApi> = {}): PulseTrayApi {
     requestAccess: vi.fn().mockResolvedValue({
       message: "Se o e-mail estiver vinculado, o token será enviado."
     }),
-    link: vi.fn().mockResolvedValue({ ...linkedSession, configured: false, dailyTime: undefined }),
-    saveDailyTime: vi.fn().mockResolvedValue(linkedSession),
+    link: vi.fn().mockResolvedValue(linkedSession),
     getQuestion: vi.fn().mockResolvedValue(null),
     submitAnswer: vi.fn().mockResolvedValue({ ...linkedSession, lastAnswerDate: "2026-07-23" }),
+    skipQuestion: vi.fn().mockResolvedValue(linkedSession),
     listEmployees: vi.fn().mockResolvedValue([]),
     listFeedbackTaxonomy: vi.fn().mockResolvedValue({ indexes: [], dimensions: [] }),
     sendFeedback: vi.fn().mockResolvedValue(undefined),
@@ -127,7 +126,7 @@ describe("PulseTray app", () => {
     await userEvent.type(input, "token-value");
     await userEvent.click(screen.getByRole("button", { name: "Vincular dispositivo" }));
     expect(bridge.link).toHaveBeenCalledWith("token-value");
-    expect(await screen.findByLabelText("Horário preferido")).toBeInTheDocument();
+    expect(await screen.findByText("Enviar feedback para alguém")).toBeInTheDocument();
   });
 
   it("keeps the token screen on validation failure and normalizes the IPC error", async () => {
@@ -150,30 +149,6 @@ describe("PulseTray app", () => {
     expect(screen.getByLabelText("Token de acesso")).toHaveValue("bad-token");
   });
 
-  it("saves the preferred daily time before unlocking navigation", async () => {
-    const pending = { ...linkedSession, configured: false, dailyTime: undefined };
-    const bridge = api({ bootstrap: vi.fn().mockResolvedValue(pending) });
-    window.pulseTray = bridge;
-    render(<App />);
-    const time = await screen.findByLabelText("Horário preferido");
-    await userEvent.clear(time);
-    await userEvent.type(time, "10:30");
-    await userEvent.click(screen.getByRole("button", { name: "Começar" }));
-    expect(bridge.saveDailyTime).toHaveBeenCalledWith("10:30");
-    expect(await screen.findByText("Enviar feedback para alguém")).toBeInTheDocument();
-  });
-
-  it("reports a schedule save failure without leaving setup", async () => {
-    const bridge = api({
-      bootstrap: vi.fn().mockResolvedValue({ ...linkedSession, configured: false, dailyTime: undefined }),
-      saveDailyTime: vi.fn().mockRejectedValue(new Error("Horário recusado"))
-    });
-    window.pulseTray = bridge;
-    render(<App />);
-    await userEvent.click(await screen.findByRole("button", { name: "Começar" }));
-    expect(await screen.findByRole("alert")).toHaveTextContent("Horário recusado");
-  });
-
   it("keeps the daily question out of navigation and opens it only on an Electron event", async () => {
     let navigate: ((view: "question", required: boolean) => void) | undefined;
     const bridge = api({
@@ -185,6 +160,7 @@ describe("PulseTray app", () => {
         employeeId: "employee-1",
         date: "2026-07-23",
         answered: false,
+        answerStatus: "unanswered",
         question: {
           id: "question-1",
           text: "Tenho espaço para aprender com erros?",
@@ -207,13 +183,44 @@ describe("PulseTray app", () => {
     expect(await screen.findByText("Resposta necessária")).toBeInTheDocument();
     expect(screen.queryByRole("navigation")).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole("radio", { name: /Concordo totalmente/ }));
-    await userEvent.click(screen.getByRole("button", { name: "Enviar resposta" }));
+    await userEvent.click(screen.getByRole("button", { name: "Confirmar resposta" }));
     expect(bridge.submitAnswer).toHaveBeenCalledWith({
       questionId: "question-1",
       value: "5",
       date: "2026-07-23"
     });
     expect(await screen.findByText("Obrigado por compartilhar seu pulso de hoje.")).toBeInTheDocument();
+    expect(screen.getByText(/sincronizada automaticamente/)).toBeInTheDocument();
+  });
+
+  it("lets the employee skip and returns to the regular experience", async () => {
+    let navigate: ((view: "question", required: boolean) => void) | undefined;
+    const bridge = api({
+      onNavigate: vi.fn((callback) => {
+        navigate = callback;
+        return () => undefined;
+      }),
+      getQuestion: vi.fn().mockResolvedValue({
+        employeeId: "employee-1",
+        date: "2026-07-23",
+        answered: false,
+        answerStatus: "unanswered",
+        question: {
+          id: "question-1",
+          text: "Pergunta de teste?",
+          choices: [{ value: "4", label: "Concordo parcialmente" }]
+        }
+      })
+    });
+    window.pulseTray = bridge;
+    render(<App />);
+    await screen.findByText("Enviar feedback para alguém");
+
+    navigate?.("question", true);
+    await userEvent.click(await screen.findByRole("button", { name: "Pular por agora" }));
+
+    expect(bridge.skipQuestion).toHaveBeenCalledOnce();
+    expect(await screen.findByText("Enviar feedback para alguém")).toBeInTheDocument();
   });
 
   it("shows the empty state for the daily question", async () => {
@@ -257,6 +264,7 @@ describe("PulseTray app", () => {
         employeeId: "employee-1",
         date: "2026-07-23",
         answered: false,
+        answerStatus: "unanswered",
         question: {
           id: "question-1",
           text: "Pergunta de teste?",
@@ -271,7 +279,7 @@ describe("PulseTray app", () => {
     navigate?.("question", true);
     const choice = await screen.findByRole("radio", { name: /Concordo parcialmente/ });
     await userEvent.click(choice);
-    await userEvent.click(screen.getByRole("button", { name: "Enviar resposta" }));
+    await userEvent.click(screen.getByRole("button", { name: "Confirmar resposta" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("Tente novamente");
     expect(choice).toHaveAttribute("aria-checked", "true");
   });
@@ -287,6 +295,7 @@ describe("PulseTray app", () => {
         employeeId: "employee-1",
         date: "2026-07-23",
         answered: true,
+        answerStatus: "external",
         question: { id: "question-1", text: "Respondida", choices: [] }
       })
     });
@@ -467,30 +476,19 @@ describe("PulseTray app", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent("Falha na consulta");
   });
 
-  it("updates the daily time from settings and reports save errors", async () => {
-    const bridge = api();
-    window.pulseTray = bridge;
+  it("explains the automatic daily-question policy in settings", async () => {
+    window.pulseTray = api();
     render(<App />);
     await userEvent.click(await screen.findByRole("button", { name: /Ajustes/ }));
-    const time = await screen.findByLabelText("Horário da pergunta diária");
-    await userEvent.clear(time);
-    await userEvent.type(time, "08:15");
-    await userEvent.click(screen.getByRole("button", { name: "Salvar" }));
-    expect(bridge.saveDailyTime).toHaveBeenCalledWith("08:15");
-    expect(await screen.findByText("Horário atualizado.")).toBeInTheDocument();
+    expect(await screen.findByText("Pergunta diária automática")).toBeInTheDocument();
+    expect(screen.getByText(/primeiro acesso e pela manhã/)).toBeInTheDocument();
+    expect(screen.queryByRole("textbox", { name: /Horário/ })).not.toBeInTheDocument();
   });
 
-  it("shows bootstrap and settings errors", async () => {
+  it("shows bootstrap errors", async () => {
     window.pulseTray = api({ bootstrap: vi.fn().mockRejectedValue("Falha ao abrir") });
-    const rendered = render(<App />);
-    expect(await screen.findByRole("alert")).toHaveTextContent("Falha ao abrir");
-    rendered.unmount();
-
-    window.pulseTray = api({ saveDailyTime: vi.fn().mockRejectedValue(new Error("Falha ao salvar")) });
     render(<App />);
-    await userEvent.click(await screen.findByRole("button", { name: /Ajustes/ }));
-    await userEvent.click(await screen.findByRole("button", { name: "Salvar" }));
-    expect(await screen.findByRole("alert")).toHaveTextContent("Falha ao salvar");
+    expect(await screen.findByRole("alert")).toHaveTextContent("Falha ao abrir");
   });
 
   it("logs out from settings", async () => {
