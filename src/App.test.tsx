@@ -458,6 +458,30 @@ describe("iTransform Pulse app", () => {
     expect(screen.getByLabelText("Comportamento observado *")).toHaveValue("Você trouxe exemplos");
   });
 
+  it("does not submit when advancing to the feedback review step", async () => {
+    const sendFeedback = vi.fn().mockResolvedValue(linkedSession);
+    window.pulseTray = api({
+      listEmployees: vi.fn().mockResolvedValue([
+        { id: "employee-2", name: "Bruno Lima", email: "bruno@example.com", position: "Engenheiro" }
+      ]),
+      sendFeedback
+    });
+    render(<App />);
+
+    await selectRecipient();
+    await chooseMethod("situacional");
+    await fillStep("Contexto ou fato observado *", "Na retrospectiva");
+    await fillStep("Comportamento observado *", "Você trouxe exemplos");
+    await fillStep("Impacto percebido *", "A conversa ficou objetiva");
+    await fillStep("Próximo passo sugerido *", "Repita o formato");
+
+    expect(await screen.findByText("Revise e conclua")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Concluir envio" })).toBeInTheDocument();
+    fireEvent.submit(document.querySelector("form")!);
+    expect(sendFeedback).not.toHaveBeenCalled();
+    expect(screen.queryByText("Seu feedback foi enviado com sucesso!")).not.toBeInTheDocument();
+  });
+
   it("shows the exact success copy and prevents duplicate submits", async () => {
     let resolveSend: (() => void) | undefined;
     const sendFeedback = vi.fn(() => new Promise<SessionView>((resolve) => {
