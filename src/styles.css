@@ -18,6 +18,18 @@
   box-sizing: border-box;
 }
 
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  margin: -1px;
+  border: 0;
+  padding: 0;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+}
+
 html,
 body,
 #root {
@@ -313,6 +325,7 @@ textarea:focus {
 }
 
 .sidebar nav button > span {
+  position: relative;
   display: grid;
   width: 25px;
   height: 25px;
@@ -321,6 +334,30 @@ textarea:focus {
   border-radius: 8px;
   font-size: 0.86rem;
   font-weight: 800;
+}
+
+.external-link-badge {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  display: grid;
+  width: 14px;
+  height: 14px;
+  place-items: center;
+  border: 1px solid #23483b;
+  border-radius: 5px;
+  color: var(--forest-dark);
+  background: #fff;
+  box-shadow: 0 2px 7px rgba(8, 25, 19, 0.28);
+  font-size: 0.58rem;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.external-navigation:hover .external-link-badge {
+  color: #fff;
+  border-color: #fff;
+  background: var(--forest);
 }
 
 .sidebar nav button > span svg {
@@ -666,8 +703,183 @@ textarea:focus {
 }
 
 .structured-feedback-form {
-  gap: 22px;
-  padding: 26px;
+  min-height: 510px;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  gap: 18px;
+  overflow: hidden;
+  padding: 24px 26px 22px;
+}
+
+.wizard-progress-group {
+  display: grid;
+  gap: 7px;
+}
+
+.wizard-progress-copy {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: var(--muted);
+  font-size: 0.66rem;
+  font-weight: 750;
+}
+
+.wizard-progress-copy strong {
+  color: var(--forest);
+}
+
+.wizard-progress {
+  height: 5px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #e3eae7;
+}
+
+.wizard-progress > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--forest);
+  transition: width 180ms ease;
+}
+
+.wizard-stage {
+  display: grid;
+  min-height: 0;
+  align-content: start;
+  gap: 20px;
+}
+
+.wizard-step-heading {
+  display: grid;
+  gap: 5px;
+}
+
+.wizard-step-heading > span {
+  color: var(--forest);
+  font-size: 0.63rem;
+  font-weight: 850;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.wizard-step-heading h3 {
+  margin: 0;
+  color: var(--slate);
+  font-size: 1.16rem;
+  letter-spacing: -0.025em;
+}
+
+.wizard-step-heading p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.74rem;
+  line-height: 1.45;
+}
+
+.wizard-writing-step {
+  display: grid;
+  gap: 13px;
+}
+
+.wizard-writing-step .guided-field textarea {
+  height: 172px;
+  min-height: 172px;
+  resize: none;
+}
+
+.wizard-requirement {
+  color: #8a5418;
+  font-size: 0.69rem;
+  font-weight: 700;
+}
+
+.wizard-actions {
+  display: grid;
+  grid-template-columns: minmax(118px, 0.65fr) minmax(160px, 1fr);
+  gap: 10px;
+  border-top: 1px solid var(--line);
+  padding-top: 16px;
+}
+
+.wizard-actions .primary,
+.wizard-actions .secondary {
+  width: 100%;
+}
+
+.selected-recipient-wizard {
+  min-height: 76px;
+  padding: 16px;
+}
+
+.selected-recipient-wizard strong {
+  font-size: 0.9rem;
+}
+
+.wizard-review {
+  display: grid;
+  gap: 14px;
+}
+
+.review-overview {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.review-overview button,
+.review-content button {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+  border: 1px solid #dce5e1;
+  border-radius: 10px;
+  padding: 9px 11px;
+  color: var(--slate);
+  background: #f8faf9;
+  text-align: left;
+}
+
+.review-overview button:hover,
+.review-content button:hover {
+  border-color: var(--forest);
+  background: #f1f7f4;
+}
+
+.review-overview span,
+.review-content span {
+  color: var(--muted);
+  font-size: 0.61rem;
+  font-weight: 750;
+  text-transform: uppercase;
+}
+
+.review-overview strong {
+  overflow: hidden;
+  font-size: 0.73rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.review-content {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.review-content button {
+  min-height: 55px;
+}
+
+.review-content p {
+  display: -webkit-box;
+  overflow: hidden;
+  margin: 0;
+  color: #475569;
+  font-size: 0.67rem;
+  line-height: 1.35;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 
 .feedback-methods {
@@ -828,7 +1040,8 @@ textarea:focus {
   top: calc(100% + 4px);
   right: 0;
   left: 0;
-  overflow: hidden;
+  max-height: 260px;
+  overflow: hidden auto;
   border: 1px solid var(--line);
   border-radius: 11px;
   background: #fff;
@@ -1222,6 +1435,23 @@ textarea:focus {
 
   .feedback-methods > div {
     grid-template-columns: 1fr;
+  }
+
+  .structured-feedback-form {
+    min-height: 500px;
+    padding: 20px;
+  }
+
+  .feedback-methods button {
+    min-height: 92px;
+  }
+
+  .review-content {
+    grid-template-columns: 1fr;
+  }
+
+  .wizard-actions {
+    grid-template-columns: 0.8fr 1.2fr;
   }
 
   .feedback-tabs button {

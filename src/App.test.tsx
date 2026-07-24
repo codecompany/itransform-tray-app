@@ -56,6 +56,30 @@ function api(overrides: Partial<PulseTrayApi> = {}): PulseTrayApi {
   };
 }
 
+async function selectRecipient(name = "Bruno Lima"): Promise<void> {
+  await userEvent.click(await screen.findByLabelText("Nome ou e-mail do colaborador"));
+  await userEvent.click(await screen.findByRole("button", { name: new RegExp(name) }));
+}
+
+async function nextStep(): Promise<void> {
+  await userEvent.click(screen.getByRole("button", { name: "Próximo" }));
+}
+
+async function chooseMethod(name: "situacional" | "desenvolvimento"): Promise<void> {
+  await nextStep();
+  await userEvent.click(screen.getByRole("radio", {
+    name: name === "situacional"
+      ? /Feedback situacional/
+      : /Feedback de desenvolvimento/
+  }));
+  await nextStep();
+}
+
+async function fillStep(label: string, value: string): Promise<void> {
+  await userEvent.type(screen.getByRole("textbox", { name: label }), value);
+  await nextStep();
+}
+
 beforeEach(() => {
   vi.stubGlobal("confirm", vi.fn().mockReturnValue(true));
   window.history.replaceState({}, "", "/");
@@ -287,15 +311,23 @@ describe("iTransform Pulse app", () => {
     await userEvent.click(search);
     await userEvent.click(await screen.findByRole("button", { name: /Bruno Lima/ }));
 
+    expect(screen.getByRole("progressbar")).toHaveAttribute("aria-valuenow", "1");
+    expect(screen.getByRole("button", { name: "Anterior" })).toBeDisabled();
+    await nextStep();
     expect(screen.getByRole("radio", { name: /Feedback situacional/ })).toBeInTheDocument();
     expect(screen.getByRole("radio", { name: /Feedback de desenvolvimento/ })).toBeInTheDocument();
     expect(screen.queryByLabelText(/Contexto/)).not.toBeInTheDocument();
 
     await userEvent.click(screen.getByRole("radio", { name: /Feedback situacional/ }));
+    await nextStep();
     expect(await screen.findByLabelText("Contexto ou fato observado *")).toBeInTheDocument();
-    expect(screen.getByLabelText("Comportamento observado *")).toBeInTheDocument();
-    expect(screen.getByLabelText("Impacto percebido *")).toBeInTheDocument();
-    expect(screen.getByLabelText("Próximo passo sugerido *")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Comportamento observado *")).not.toBeInTheDocument();
+    expect(screen.getByRole("progressbar")).toHaveAttribute("aria-valuenow", "3");
+    await userEvent.click(screen.getByRole("button", { name: "Anterior" }));
+    expect(screen.getByRole("radio", { name: /Feedback situacional/ })).toHaveAttribute(
+      "aria-checked",
+      "true"
+    );
   });
 
   it("resets the composer when changing recipient and submits development choices", async () => {
@@ -307,20 +339,29 @@ describe("iTransform Pulse app", () => {
     window.pulseTray = bridge;
     render(<App />);
 
-    await userEvent.click(await screen.findByLabelText("Nome ou e-mail do colaborador"));
-    await userEvent.click(await screen.findByRole("button", { name: /Bruno Lima/ }));
-    await userEvent.click(screen.getByRole("radio", { name: /Feedback situacional/ }));
-    await userEvent.type(screen.getByLabelText("Contexto ou fato observado *"), "Contexto temporário");
+    await selectRecipient();
+    await chooseMethod("situacional");
+    await userEvent.type(
+      screen.getByLabelText("Contexto ou fato observado *"),
+      "Contexto temporário"
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Anterior" }));
+    await userEvent.click(screen.getByRole("button", { name: "Anterior" }));
     await userEvent.click(screen.getByRole("button", { name: "Trocar" }));
     expect(screen.getByLabelText("Nome ou e-mail do colaborador")).toHaveValue("");
 
-    await userEvent.click(screen.getByLabelText("Nome ou e-mail do colaborador"));
-    await userEvent.click(await screen.findByRole("button", { name: /Bruno Lima/ }));
-    await userEvent.click(screen.getByRole("radio", { name: /Feedback de desenvolvimento/ }));
-    await userEvent.type(screen.getByLabelText("Contexto ou evidências *"), "No planejamento");
-    await userEvent.type(screen.getByLabelText("Parar de fazer"), "Mudar prioridades sem alinhamento");
+    await selectRecipient();
+    await chooseMethod("desenvolvimento");
+    await fillStep("Contexto ou evidências *", "No planejamento");
+    await nextStep();
+    await nextStep();
+    await userEvent.type(
+      screen.getByRole("textbox", { name: "Parar de fazer" }),
+      "Mudar prioridades sem alinhamento"
+    );
+    await nextStep();
     await userEvent.click(screen.getByRole("button", { name: "Importância 5 de 5" }));
-    await userEvent.click(screen.getByRole("button", { name: "Enviar feedback" }));
+    await userEvent.click(screen.getByRole("button", { name: "Concluir envio" }));
 
     expect(bridge.sendFeedback).toHaveBeenCalledWith(expect.objectContaining({
       toEmployeeId: "employee-2",
@@ -355,14 +396,20 @@ describe("iTransform Pulse app", () => {
       ])
     });
     render(<App />);
-    await userEvent.click(await screen.findByLabelText("Nome ou e-mail do colaborador"));
-    await userEvent.click(await screen.findByRole("button", { name: /Bruno Lima/ }));
-    await userEvent.click(screen.getByRole("radio", { name: /Feedback de desenvolvimento/ }));
-    await userEvent.type(screen.getByLabelText("Contexto ou evidências *"), "Nas últimas entregas");
-    expect(screen.getByRole("button", { name: "Enviar feedback" })).toBeDisabled();
-    await userEvent.type(screen.getByLabelText("Começar a fazer"), "Compartilhe riscos mais cedo");
-    expect(screen.getByRole("button", { name: "Enviar feedback" })).toBeEnabled();
+    await selectRecipient();
+    await chooseMethod("desenvolvimento");
+    await fillStep("Contexto ou evidências *", "Nas últimas entregas");
+    await nextStep();
+    await userEvent.type(
+      screen.getByRole("textbox", { name: "Começar a fazer" }),
+      "Compartilhe riscos mais cedo"
+    );
+    expect(screen.getByRole("button", { name: "Próximo" })).toBeEnabled();
     expect(screen.getByText("28/600")).toBeInTheDocument();
+    await nextStep();
+    expect(screen.getByRole("button", { name: "Próximo" })).toBeEnabled();
+    await nextStep();
+    expect(screen.getByRole("button", { name: "Concluir envio" })).toBeEnabled();
   });
 
   it("preserves structured fields on failure", async () => {
@@ -374,15 +421,15 @@ describe("iTransform Pulse app", () => {
     });
     window.pulseTray = bridge;
     render(<App />);
-    await userEvent.type(await screen.findByLabelText("Nome ou e-mail do colaborador"), "Bruno");
-    await userEvent.click(await screen.findByRole("button", { name: /Bruno Lima/ }));
-    await userEvent.click(screen.getByRole("radio", { name: /Feedback situacional/ }));
-    await userEvent.type(screen.getByLabelText("Contexto ou fato observado *"), "Na retrospectiva");
-    await userEvent.type(screen.getByLabelText("Comportamento observado *"), "Você trouxe exemplos");
-    await userEvent.type(screen.getByLabelText("Impacto percebido *"), "A conversa ficou objetiva");
-    await userEvent.type(screen.getByLabelText("Próximo passo sugerido *"), "Repita o formato");
-    await userEvent.click(screen.getByRole("button", { name: "Enviar feedback" }));
+    await selectRecipient();
+    await chooseMethod("situacional");
+    await fillStep("Contexto ou fato observado *", "Na retrospectiva");
+    await fillStep("Comportamento observado *", "Você trouxe exemplos");
+    await fillStep("Impacto percebido *", "A conversa ficou objetiva");
+    await fillStep("Próximo passo sugerido *", "Repita o formato");
+    await userEvent.click(screen.getByRole("button", { name: "Concluir envio" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("Falha temporária");
+    await userEvent.click(screen.getByRole("button", { name: /Comportamento observado/ }));
     expect(screen.getByLabelText("Comportamento observado *")).toHaveValue("Você trouxe exemplos");
   });
 
@@ -398,12 +445,13 @@ describe("iTransform Pulse app", () => {
       sendFeedback
     });
     render(<App />);
-    await userEvent.type(await screen.findByLabelText("Nome ou e-mail do colaborador"), "Bruno");
-    await userEvent.click(await screen.findByRole("button", { name: /Bruno Lima/ }));
-    await userEvent.click(screen.getByRole("radio", { name: /Feedback de desenvolvimento/ }));
-    await userEvent.type(screen.getByLabelText("Contexto ou evidências *"), "Nas últimas entregas");
-    await userEvent.type(screen.getByLabelText("Continuar fazendo"), "Continue resumindo decisões");
-    const submit = screen.getByRole("button", { name: "Enviar feedback" });
+    await selectRecipient();
+    await chooseMethod("desenvolvimento");
+    await fillStep("Contexto ou evidências *", "Nas últimas entregas");
+    await fillStep("Continuar fazendo", "Continue resumindo decisões");
+    await nextStep();
+    await nextStep();
+    const submit = screen.getByRole("button", { name: "Concluir envio" });
     await userEvent.click(submit);
     expect(submit).toBeDisabled();
     expect(sendFeedback).toHaveBeenCalledOnce();
@@ -556,14 +604,21 @@ describe("iTransform Pulse app", () => {
     window.pulseTray = leaderBridge;
     const rendered = render(<App />);
 
-    await userEvent.click(await screen.findByRole("button", { name: "ManagerHub" }));
+    const managerLink = await screen.findByRole("button", {
+      name: "Abrir ManagerHub no navegador"
+    });
+    expect(managerLink).toHaveAttribute("title", "Abrir ManagerHub no navegador");
+    expect(managerLink.querySelector(".external-link-badge")).toHaveTextContent("↗");
+    await userEvent.click(managerLink);
     expect(leaderBridge.openManagerHub).toHaveBeenCalledOnce();
     rendered.unmount();
 
     window.pulseTray = api();
     render(<App />);
     await screen.findByRole("button", { name: "Feedbacks" });
-    expect(screen.queryByRole("button", { name: "ManagerHub" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", {
+      name: "Abrir ManagerHub no navegador"
+    })).not.toBeInTheDocument();
   });
 
   it("shows bootstrap errors", async () => {
