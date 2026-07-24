@@ -9,6 +9,14 @@ export interface QuestionWindow {
   setVisibleOnAllWorkspaces(visible: boolean): void;
 }
 
+/** questionModeChanged identifies a real enforcement-mode transition. */
+export function questionModeChanged(
+  currentRequired: boolean,
+  nextRequired: boolean
+): boolean {
+  return currentRequired !== nextRequired;
+}
+
 export function applyQuestionWindowMode(
   window: QuestionWindow,
   required: boolean,

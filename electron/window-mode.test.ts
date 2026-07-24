@@ -1,5 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
-import { applyQuestionWindowMode, type QuestionWindow } from "./window-mode";
+import {
+  applyQuestionWindowMode,
+  questionModeChanged,
+  type QuestionWindow
+} from "./window-mode";
 
 function windowDouble(): QuestionWindow {
   return {
@@ -15,6 +19,18 @@ function windowDouble(): QuestionWindow {
 }
 
 describe("question window mode", () => {
+  it.each([
+    { current: false, next: false, changed: false },
+    { current: false, next: true, changed: true },
+    { current: true, next: false, changed: true },
+    { current: true, next: true, changed: false }
+  ])(
+    "reports mode transition from $current to $next as $changed",
+    ({ current, next, changed }) => {
+      expect(questionModeChanged(current, next)).toBe(changed);
+    }
+  );
+
   it("enforces a fixed, non-closable window without entering full screen", () => {
     const window = windowDouble();
 
