@@ -31,6 +31,13 @@ interface IndexRecord {
   key: string;
 }
 
+export interface AccessTokenBundle {
+  employeeToken: string;
+  knowledgeToken: string;
+  pulseToken: string;
+  expiresAt: string;
+}
+
 export class ApiError extends Error {
   constructor(
     message: string,
@@ -66,13 +73,13 @@ function employeeName(employee: EmployeeRecord): string {
 export class SintoniaClient {
   constructor(private readonly baseUrl = process.env.PULSETRAY_API_URL ?? "https://api.storifly.ai") {}
 
-  private async request<T>(path: string, token: string, init: RequestInit = {}): Promise<T> {
+  private async request<T>(path: string, token: string | undefined, init: RequestInit = {}): Promise<T> {
     const response = await fetch(`${this.baseUrl.replace(/\/$/, "")}${path}`, {
       ...init,
       signal: AbortSignal.timeout(12_000),
       headers: {
         Accept: "application/json",
-        Authorization: `Bearer ${token}`,
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
         ...(init.body ? { "Content-Type": "application/json" } : {}),
         ...init.headers
       }
@@ -82,6 +89,20 @@ export class SintoniaClient {
       throw new ApiError(body.error || `A API Sintonia respondeu ${response.status}.`, response.status, body.code);
     }
     return response.json() as Promise<T>;
+  }
+
+  async requestAccess(email: string): Promise<{ message: string }> {
+    return this.request<{ message: string }>("/v1/pulse/tray/access-requests", undefined, {
+      method: "POST",
+      body: JSON.stringify({ email })
+    });
+  }
+
+  async exchangeTrayToken(token: string): Promise<AccessTokenBundle> {
+    return this.request<AccessTokenBundle>("/v1/pulse/tray/session", undefined, {
+      method: "POST",
+      body: JSON.stringify({ token })
+    });
   }
 
   private async listPages<T>(

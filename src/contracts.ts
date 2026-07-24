@@ -92,6 +92,7 @@ export interface ReceivedFeedbackResult {
 
 export interface PulseTrayApi {
   bootstrap(): Promise<SessionView>;
+  requestAccess(email: string): Promise<{ message: string }>;
   link(token: string): Promise<SessionView>;
   saveDailyTime(time: string): Promise<SessionView>;
   getQuestion(): Promise<DailyQuestion | null>;

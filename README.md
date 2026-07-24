@@ -14,9 +14,10 @@ npm run dev
 ```
 
 O processo principal lê `PULSETRAY_API_URL` e usa
-`https://api.storifly.ai` por padrão. O token informado no onboarding nunca é
-entregue ao renderer: ele é armazenado com a proteção nativa do sistema e usado
-somente nas chamadas às APIs oficiais.
+`https://api.storifly.ai` por padrão. No primeiro acesso, o colaborador solicita
+o token com o e-mail corporativo e recebe a credencial na própria caixa postal.
+A credencial e os tokens oficiais de curta duração nunca são entregues ao
+renderer: ficam protegidos pelo armazenamento nativo do sistema.
 
 ## Verificação
 
@@ -36,13 +37,15 @@ npm run smoke:npm
 - `GET /v1/pulse/question/:employeeId`
 - `POST /v1/pulse/answer/:employeeId`
 - `POST /v1/pulse/feedbacks`
+- `POST /v1/pulse/tray/access-requests`
+- `POST /v1/pulse/tray/session`
 - consultas autorizadas de colaboradores, índices e dimensões
 
-O serviço atual ainda não oferece uma rota autorizada para resgatar um token
-opaco de onboarding nem para listar feedbacks recebidos. Por isso, a vinculação
-aceita um token de identidade que contenha e-mail ou Employee ID, e a tela de
-recebidos apresenta uma indisponibilidade explícita. Nenhuma rota alternativa,
-acesso a banco, datalake ou Manager Hub é utilizado.
+O token opaco recebido por e-mail é trocado no Pulse Service por tokens oficiais
+das audiências Employee, Knowledge e Pulse. A tela de recebidos continua
+apresentando indisponibilidade explícita enquanto não existir um contrato
+autorizado para esse histórico. Nenhuma rota alternativa, acesso a banco,
+datalake ou Manager Hub é utilizado.
 
 ## Distribuição
 

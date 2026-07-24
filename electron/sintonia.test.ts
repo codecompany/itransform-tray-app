@@ -15,6 +15,28 @@ function response(body: unknown, status = 200): Response {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("SintoniaClient", () => {
+  it("requests and exchanges the durable PulseTray token without an Authorization header", async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(response({ message: "E-mail aceito." }, 202))
+      .mockResolvedValueOnce(response({
+        employeeToken: "employee",
+        knowledgeToken: "knowledge",
+        pulseToken: "pulse",
+        expiresAt: "2026-07-23T22:00:00Z"
+      }));
+    vi.stubGlobal("fetch", fetchMock);
+    const client = new SintoniaClient("https://example.test");
+
+    await expect(client.requestAccess("ana@example.com")).resolves.toEqual({ message: "E-mail aceito." });
+    await expect(client.exchangeTrayToken("pt_live_token")).resolves.toMatchObject({ pulseToken: "pulse" });
+    expect(fetchMock.mock.calls[0][0]).toBe("https://example.test/v1/pulse/tray/access-requests");
+    expect(fetchMock.mock.calls[0][1].headers.Authorization).toBeUndefined();
+    expect(fetchMock.mock.calls[0][1].body).toBe(JSON.stringify({ email: "ana@example.com" }));
+    expect(fetchMock.mock.calls[1][0]).toBe("https://example.test/v1/pulse/tray/session");
+    expect(fetchMock.mock.calls[1][1].headers.Authorization).toBeUndefined();
+    expect(fetchMock.mock.calls[1][1].body).toBe(JSON.stringify({ token: "pt_live_token" }));
+  });
+
   it("resolves the employee and manager from the token email", async () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(response({

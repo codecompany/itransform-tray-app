@@ -23,10 +23,11 @@ import type {
   SessionView
 } from "../src/contracts.js";
 import { DailyScheduler, localDate } from "./scheduler.js";
-import { ApiError, SintoniaClient } from "./sintonia.js";
+import { ApiError, SintoniaClient, type AccessTokenBundle } from "./sintonia.js";
 
 interface LocalSession {
   tokenCipher?: string;
+  tokensCipher?: string;
   profile?: EmployeeProfile;
   dailyTime?: string;
   lastAnswerDate?: string;
@@ -73,16 +74,34 @@ class SessionStore {
     return safeStorage.decryptString(Buffer.from(this.state.tokenCipher, "base64"));
   }
 
-  async link(token: string, profile: EmployeeProfile): Promise<void> {
+  tokens(): AccessTokenBundle | undefined {
+    if (!this.state.tokensCipher) return undefined;
+    if (!safeStorage.isEncryptionAvailable()) {
+      throw new Error("O armazenamento seguro do sistema não está disponível.");
+    }
+    const raw = safeStorage.decryptString(Buffer.from(this.state.tokensCipher, "base64"));
+    return JSON.parse(raw) as AccessTokenBundle;
+  }
+
+  async link(token: string, tokens: AccessTokenBundle, profile: EmployeeProfile): Promise<void> {
     if (!safeStorage.isEncryptionAvailable()) {
       throw new Error("O armazenamento seguro do sistema não está disponível.");
     }
     this.state = {
       tokenCipher: safeStorage.encryptString(token).toString("base64"),
+      tokensCipher: safeStorage.encryptString(JSON.stringify(tokens)).toString("base64"),
       profile,
       events: []
     };
     this.event("system", "PulseTray vinculado", `Olá, ${profile.name}. Sua conta está pronta.`);
+    await this.save();
+  }
+
+  async setTokens(tokens: AccessTokenBundle): Promise<void> {
+    if (!safeStorage.isEncryptionAvailable()) {
+      throw new Error("O armazenamento seguro do sistema não está disponível.");
+    }
+    this.state.tokensCipher = safeStorage.encryptString(JSON.stringify(tokens)).toString("base64");
     await this.save();
   }
 
@@ -147,6 +166,41 @@ function requireProfile(): EmployeeProfile {
   return profile;
 }
 
+function accessTokensFresh(tokens: AccessTokenBundle | undefined): tokens is AccessTokenBundle {
+  if (!tokens) return false;
+  const expiresAt = Date.parse(tokens.expiresAt);
+  return Number.isFinite(expiresAt) && expiresAt > Date.now() + 60_000;
+}
+
+async function accessTokens(force = false): Promise<AccessTokenBundle> {
+  const cached = store.tokens();
+  if (!force && accessTokensFresh(cached)) return cached;
+  try {
+    const refreshed = await client.exchangeTrayToken(store.token());
+    await store.setTokens(refreshed);
+    return refreshed;
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 401) {
+      await logout();
+      throw new Error("Seu token expirou ou foi substituído. Solicite um novo acesso.");
+    }
+    throw error;
+  }
+}
+
+async function withAccessTokens<T>(
+  operation: (tokens: AccessTokenBundle) => Promise<T>
+): Promise<T> {
+  let tokens = await accessTokens();
+  try {
+    return await operation(tokens);
+  } catch (error) {
+    if (!(error instanceof ApiError) || error.status !== 401) throw error;
+    tokens = await accessTokens(true);
+    return operation(tokens);
+  }
+}
+
 function stringValue(value: unknown, field: string, max = 8_192): string {
   if (typeof value !== "string" || !value.trim() || value.length > max) {
     throw new Error(`${field} inválido.`);
@@ -185,7 +239,7 @@ async function checkDailyQuestion(): Promise<void> {
   const profile = store.snapshot().profile;
   if (!profile) return;
   try {
-    const result = await client.getQuestion(store.token(), profile.id);
+    const result = await withAccessTokens((tokens) => client.getQuestion(tokens.pulseToken, profile.id));
     if (!result || store.snapshot().lastAnswerDate === result.date) return;
     currentQuestion = { ...result, answered: false };
     await store.addEvent("system", "Pergunta diária disponível", "A pergunta de hoje aguarda sua resposta.");
@@ -289,11 +343,20 @@ function registerIpc(): void {
     trusted(event);
     return sessionView();
   });
+  ipcMain.handle("session:request-access", async (event, rawEmail: unknown) => {
+    trusted(event);
+    const email = stringValue(rawEmail, "E-mail", 254).toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      throw new Error("Informe um e-mail corporativo válido.");
+    }
+    return client.requestAccess(email);
+  });
   ipcMain.handle("session:link", async (event, rawToken: unknown) => {
     trusted(event);
     const token = stringValue(rawToken, "Token");
-    const profile = await client.link(token);
-    await store.link(token, profile);
+    const tokens = await client.exchangeTrayToken(token);
+    const profile = await client.link(tokens.employeeToken);
+    await store.link(token, tokens, profile);
     return sessionView();
   });
   ipcMain.handle("session:daily-time", async (event, rawTime: unknown) => {
@@ -312,7 +375,7 @@ function registerIpc(): void {
   ipcMain.handle("question:get", async (event) => {
     trusted(event);
     const profile = requireProfile();
-    const question = await client.getQuestion(store.token(), profile.id);
+    const question = await withAccessTokens((tokens) => client.getQuestion(tokens.pulseToken, profile.id));
     if (!question) {
       currentQuestion = null;
       return null;
@@ -340,7 +403,9 @@ function registerIpc(): void {
     if (store.snapshot().lastAnswerDate === date) throw new Error("A pergunta de hoje já foi respondida.");
     answerInFlight = true;
     try {
-      await client.submitAnswer(store.token(), profile.id, questionId, value);
+      await withAccessTokens((tokens) =>
+        client.submitAnswer(tokens.pulseToken, profile.id, questionId, value)
+      );
       await store.markAnswered(date, questionId);
       currentQuestion = { ...currentQuestion, answered: true };
       setQuestionRequired(false);
@@ -360,12 +425,16 @@ function registerIpc(): void {
   ipcMain.handle("feedback:employees", async (event) => {
     trusted(event);
     const profile = requireProfile();
-    return client.listEmployees(store.token(), profile.companyId);
+    return withAccessTokens((tokens) =>
+      client.listEmployees(tokens.employeeToken, profile.companyId)
+    );
   });
   ipcMain.handle("feedback:dimensions", async (event) => {
     trusted(event);
     const profile = requireProfile();
-    return client.listFeedbackDimensions(store.token(), profile.companyId);
+    return withAccessTokens((tokens) =>
+      client.listFeedbackDimensions(tokens.knowledgeToken, profile.companyId)
+    );
   });
   ipcMain.handle("feedback:send", async (event, raw: unknown) => {
     trusted(event);
@@ -384,14 +453,17 @@ function registerIpc(): void {
     if (draft.toEmployeeId === profile.id) throw new Error("Selecione outro colaborador.");
     feedbackInFlight = true;
     try {
+      const tokens = await accessTokens();
       const [employees, dimensions] = await Promise.all([
-        client.listEmployees(store.token(), profile.companyId),
-        client.listFeedbackDimensions(store.token(), profile.companyId)
+        client.listEmployees(tokens.employeeToken, profile.companyId),
+        client.listFeedbackDimensions(tokens.knowledgeToken, profile.companyId)
       ]);
       const recipient = employees.find((employee) => employee.id === draft.toEmployeeId);
       const dimension = dimensions.find((item) => item.id === draft.subDimensionId) as FeedbackDimension | undefined;
       if (!recipient || !dimension) throw new Error("Colaborador ou subdimensão inválida.");
-      await client.sendFeedback(store.token(), profile, draft, dimension);
+      await withAccessTokens((freshTokens) =>
+        client.sendFeedback(freshTokens.pulseToken, profile, draft, dimension)
+      );
       await store.addEvent(
         "feedback-sent",
         `Feedback enviado para ${recipient.name}`,

@@ -25,47 +25,99 @@ function ErrorNotice({ message }: { message: string }): JSX.Element {
 }
 
 function TokenScreen({ onLinked }: { onLinked: (session: SessionView) => void }): JSX.Element {
+  const [email, setEmail] = useState("");
   const [token, setToken] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
+  const [requestBusy, setRequestBusy] = useState(false);
+  const [linkBusy, setLinkBusy] = useState(false);
+  const [requestError, setRequestError] = useState("");
+  const [linkError, setLinkError] = useState("");
+  const [success, setSuccess] = useState("");
 
-  async function submit(event: React.FormEvent): Promise<void> {
+  async function requestAccess(event: React.FormEvent): Promise<void> {
     event.preventDefault();
-    setBusy(true);
-    setError("");
+    setRequestBusy(true);
+    setRequestError("");
+    setSuccess("");
+    try {
+      const result = await window.pulseTray.requestAccess(email);
+      setSuccess(result.message);
+    } catch (reason) {
+      setRequestError(messageOf(reason));
+    } finally {
+      setRequestBusy(false);
+    }
+  }
+
+  async function link(event: React.FormEvent): Promise<void> {
+    event.preventDefault();
+    setLinkBusy(true);
+    setLinkError("");
     try {
       onLinked(await window.pulseTray.link(token));
     } catch (reason) {
-      setError(messageOf(reason));
+      setLinkError(messageOf(reason));
     } finally {
-      setBusy(false);
+      setLinkBusy(false);
     }
   }
 
   return (
     <main className="welcome">
-      <section className="welcome-card">
+      <section className="welcome-card auth-card">
         <img src={logo} className="brand-logo" alt="iTransform" />
         <span className="eyebrow">PulseTray</span>
         <h1>Seu pulso diário, sem interromper o ritmo.</h1>
-        <p>Informe o token único recebido no onboarding para vincular este dispositivo.</p>
-        <form onSubmit={submit} className="stack">
+        <p>Informe seu e-mail corporativo. Enviaremos um token pessoal para vincular este dispositivo.</p>
+        {success ? (
+          <>
+            <div className="notice success" role="status">{success}</div>
+            <button
+              type="button"
+              className="text-button"
+              onClick={() => {
+                setSuccess("");
+                setRequestError("");
+              }}
+            >
+              Solicitar novamente
+            </button>
+          </>
+        ) : (
+          <form onSubmit={requestAccess} className="stack">
+            <label htmlFor="corporate-email">E-mail corporativo</label>
+            <input
+              id="corporate-email"
+              type="email"
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
+              placeholder="voce@empresa.com"
+              autoComplete="email"
+              autoFocus
+              required
+            />
+            <button className="primary" disabled={requestBusy || !email.trim()}>
+              {requestBusy ? "Enviando…" : "Enviar meu token"}
+            </button>
+          </form>
+        )}
+        {requestError && <ErrorNotice message={requestError} />}
+        <div className="auth-divider"><span>Já recebeu seu token?</span></div>
+        <form onSubmit={link} className="stack">
           <label htmlFor="token">Token de acesso</label>
           <input
             id="token"
             value={token}
             onChange={(event) => setToken(event.target.value)}
             placeholder="Cole seu token aqui"
-            autoComplete="one-time-code"
-            autoFocus
+            autoComplete="off"
             required
           />
-          {error && <ErrorNotice message={error} />}
-          <button className="primary" disabled={busy || !token.trim()}>
-            {busy ? "Validando…" : "Vincular dispositivo"}
+          {linkError && <ErrorNotice message={linkError} />}
+          <button className="secondary" disabled={linkBusy || !token.trim()}>
+            {linkBusy ? "Validando…" : "Vincular dispositivo"}
           </button>
         </form>
-        <small>O token fica protegido pelo armazenamento seguro do sistema.</small>
+        <small>Seu token é pessoal e fica protegido pelo armazenamento seguro do sistema.</small>
       </section>
     </main>
   );

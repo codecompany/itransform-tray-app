@@ -40,6 +40,9 @@ export function installPreviewBridge(): void {
     : configured;
   window.pulseTray = {
     bootstrap: async () => state,
+    requestAccess: async () => ({
+      message: "Se o e-mail estiver vinculado a um colaborador ativo, o token será enviado em instantes."
+    }),
     link: async () => {
       state = { ...configured, configured: false, dailyTime: undefined };
       return state;

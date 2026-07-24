@@ -3,6 +3,7 @@ import type { AppView, FeedbackDraft, PulseTrayApi } from "../src/contracts.js";
 
 const api: PulseTrayApi = {
   bootstrap: () => ipcRenderer.invoke("session:bootstrap"),
+  requestAccess: (email) => ipcRenderer.invoke("session:request-access", email),
   link: (token) => ipcRenderer.invoke("session:link", token),
   saveDailyTime: (time) => ipcRenderer.invoke("session:daily-time", time),
   getQuestion: () => ipcRenderer.invoke("question:get"),

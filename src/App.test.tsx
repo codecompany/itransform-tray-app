@@ -27,6 +27,9 @@ const linkedSession: SessionView = {
 function api(overrides: Partial<PulseTrayApi> = {}): PulseTrayApi {
   return {
     bootstrap: vi.fn().mockResolvedValue(linkedSession),
+    requestAccess: vi.fn().mockResolvedValue({
+      message: "Se o e-mail estiver vinculado, o token será enviado."
+    }),
     link: vi.fn().mockResolvedValue({ ...linkedSession, configured: false, dailyTime: undefined }),
     saveDailyTime: vi.fn().mockResolvedValue(linkedSession),
     getQuestion: vi.fn().mockResolvedValue(null),
@@ -46,6 +49,44 @@ beforeEach(() => {
 });
 
 describe("PulseTray app", () => {
+  it("requests a token using the corporate email without exposing account existence", async () => {
+    const bridge = api({
+      bootstrap: vi.fn().mockResolvedValue({
+        linked: false,
+        configured: false,
+        events: [],
+        receivedFeedbackAvailable: false
+      })
+    });
+    window.pulseTray = bridge;
+    render(<App />);
+    await userEvent.type(await screen.findByLabelText("E-mail corporativo"), "ANA@EXAMPLE.COM");
+    await userEvent.click(screen.getByRole("button", { name: "Enviar meu token" }));
+    expect(bridge.requestAccess).toHaveBeenCalledWith("ANA@EXAMPLE.COM");
+    expect(await screen.findByRole("status")).toHaveTextContent(
+      "Se o e-mail estiver vinculado, o token será enviado."
+    );
+  });
+
+  it("keeps the corporate email visible when token delivery fails", async () => {
+    const bridge = api({
+      bootstrap: vi.fn().mockResolvedValue({
+        linked: false,
+        configured: false,
+        events: [],
+        receivedFeedbackAvailable: false
+      }),
+      requestAccess: vi.fn().mockRejectedValue(new Error("Não foi possível enviar o token agora."))
+    });
+    window.pulseTray = bridge;
+    render(<App />);
+    const email = await screen.findByLabelText("E-mail corporativo");
+    await userEvent.type(email, "ana@example.com");
+    await userEvent.click(screen.getByRole("button", { name: "Enviar meu token" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Não foi possível enviar o token agora.");
+    expect(email).toHaveValue("ana@example.com");
+  });
+
   it("requires the onboarding token before unlocking the app", async () => {
     const bridge = api({
       bootstrap: vi.fn().mockResolvedValue({

@@ -69,6 +69,56 @@ p {
   background:
     linear-gradient(145deg, rgba(15, 30, 23, 0.96), rgba(28, 59, 49, 0.92) 55%, rgba(67, 103, 90, 0.88)),
     url("./assets/login-abstract.svg") center / cover;
+  overflow-y: auto;
+}
+
+.auth-card {
+  padding: 28px 32px;
+}
+
+.auth-card .brand-logo {
+  margin-bottom: 20px;
+}
+
+.auth-card > p {
+  margin-bottom: 20px;
+}
+
+.auth-card > .notice {
+  margin-top: 4px;
+}
+
+.text-button {
+  display: block;
+  margin: 8px auto 0;
+  border: 0;
+  padding: 4px 8px;
+  color: var(--forest);
+  background: transparent;
+  font-size: 0.72rem;
+  font-weight: 750;
+}
+
+.text-button:hover {
+  text-decoration: underline;
+}
+
+.auth-divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 18px 0 14px;
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.auth-divider::before,
+.auth-divider::after {
+  height: 1px;
+  flex: 1;
+  background: var(--line);
+  content: "";
 }
 
 .welcome-card {
