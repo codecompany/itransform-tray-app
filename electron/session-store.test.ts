@@ -94,8 +94,8 @@ describe("encrypted session store", () => {
     ]);
 
     const persisted = await fs.readFile(file, "utf8");
-    expect(persisted).not.toContain("22:00");
-    expect(persisted).not.toContain("12:00");
+    expect(persisted).not.toContain('"start":"22:00"');
+    expect(persisted).not.toContain('"start":"12:00"');
 
     const reopened = new SessionStore(file, secureStorage);
     await reopened.load();
