@@ -355,7 +355,7 @@ function registerIpc(): void {
     trusted(event);
     const token = stringValue(rawToken, "Token");
     const tokens = await client.exchangeTrayToken(token);
-    const profile = await client.link(tokens.employeeToken);
+    const profile = await client.link(tokens.employeeToken, tokens.employeeId);
     await store.link(token, tokens, profile);
     return sessionView();
   });

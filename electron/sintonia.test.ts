@@ -1,10 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ApiError, SintoniaClient } from "./sintonia";
 
-function jwt(claims: Record<string, unknown>): string {
-  return `header.${Buffer.from(JSON.stringify(claims)).toString("base64url")}.signature`;
-}
-
 function response(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
     status,
@@ -19,6 +15,7 @@ describe("SintoniaClient", () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(response({ message: "E-mail aceito." }, 202))
       .mockResolvedValueOnce(response({
+        employeeId: "employee-1",
         employeeToken: "employee",
         knowledgeToken: "knowledge",
         pulseToken: "pulse",
@@ -28,7 +25,10 @@ describe("SintoniaClient", () => {
     const client = new SintoniaClient("https://example.test");
 
     await expect(client.requestAccess("ana@example.com")).resolves.toEqual({ message: "E-mail aceito." });
-    await expect(client.exchangeTrayToken("pt_live_token")).resolves.toMatchObject({ pulseToken: "pulse" });
+    await expect(client.exchangeTrayToken("pt_live_token")).resolves.toMatchObject({
+      employeeId: "employee-1",
+      pulseToken: "pulse"
+    });
     expect(fetchMock.mock.calls[0][0]).toBe("https://example.test/v1/pulse/tray/access-requests");
     expect(fetchMock.mock.calls[0][1].headers.Authorization).toBeUndefined();
     expect(fetchMock.mock.calls[0][1].body).toBe(JSON.stringify({ email: "ana@example.com" }));
@@ -37,7 +37,7 @@ describe("SintoniaClient", () => {
     expect(fetchMock.mock.calls[1][1].body).toBe(JSON.stringify({ token: "pt_live_token" }));
   });
 
-  it("resolves the employee and manager from the token email", async () => {
+  it("resolves the employee and manager from the session employee ID", async () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(response({
         id: "employee-1",
@@ -62,15 +62,15 @@ describe("SintoniaClient", () => {
       }));
     vi.stubGlobal("fetch", fetchMock);
 
-    const profile = await new SintoniaClient("https://example.test").link(jwt({ email: "ana@example.com" }));
+    const profile = await new SintoniaClient("https://example.test").link("employee-token", "employee-1");
     expect(profile).toMatchObject({ id: "employee-1", name: "Ana Silva", managerName: "Caio Souza" });
-    expect(fetchMock.mock.calls[0][0]).toBe("https://example.test/v1/employees/email/ana%40example.com");
+    expect(fetchMock.mock.calls[0][0]).toBe("https://example.test/v1/employees/employee-1");
     expect(fetchMock.mock.calls[0][1].headers.Authorization).toContain("Bearer ");
   });
 
-  it("rejects a token without a resolvable employee identity", async () => {
-    await expect(new SintoniaClient().link("opaque-token")).rejects.toMatchObject({
-      code: "TOKEN_IDENTITY_MISSING",
+  it("rejects a session without an employee ID", async () => {
+    await expect(new SintoniaClient().link("employee-token", undefined)).rejects.toMatchObject({
+      code: "SESSION_IDENTITY_MISSING",
       status: 400
     });
   });
@@ -88,7 +88,7 @@ describe("SintoniaClient", () => {
     }));
     vi.stubGlobal("fetch", fetchMock);
     const profile = await new SintoniaClient("https://example.test/")
-      .link(jwt({ employee_id: "employee-2" }));
+      .link("employee-token", "employee-2");
     expect(profile.name).toBe("fallback@example.com");
     expect(fetchMock.mock.calls[0][0]).toBe("https://example.test/v1/employees/employee-2");
   });
@@ -107,7 +107,7 @@ describe("SintoniaClient", () => {
         startDate: "2025-01-02T00:00:00Z"
       }))
       .mockResolvedValueOnce(response({ error: "not found" }, 404)));
-    const profile = await new SintoniaClient("https://example.test").link(jwt({ email: "ana@example.com" }));
+    const profile = await new SintoniaClient("https://example.test").link("employee-token", "employee-1");
     expect(profile.managerName).toBeUndefined();
   });
 

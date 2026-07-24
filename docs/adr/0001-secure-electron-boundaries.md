@@ -20,6 +20,9 @@ Electron no pacote.
 - O renderer permanece web puro, com `contextIsolation`, sandbox e CSP.
 - O token é criptografado com o armazenamento seguro do sistema e nunca aparece
   em logs ou respostas IPC.
+- A sessão do Pulse Service fornece o Employee ID revalidado. O processo
+  principal usa esse ID para carregar o perfil e não interpreta claims dos
+  access tokens.
 - Toda integração usa APIs oficiais. Contratos ausentes permanecem indisponíveis
   de forma explícita.
 - O pacote npm baixa o artefato portátil da mesma versão, valida o SHA-256 e
@@ -43,6 +46,7 @@ checksum, staging e substituição atômica.
 ## Consequences
 
 - APIs e credenciais ficam fora do contexto DOM.
+- A vinculação não depende de e-mail ou Employee ID dentro do JWT de Employee.
 - A janela obrigatória continua ativa após tentativas de fechamento.
 - Novas operações precisam de canal IPC explícito e validação no processo
   principal.
@@ -51,6 +55,6 @@ checksum, staging e substituição atômica.
 
 ## Action Items
 
-1. Disponibilizar o contrato oficial de resgate do token de onboarding.
+1. Manter o teste de contrato entre a resposta de sessão e a vinculação pelo
+   Employee ID.
 2. Disponibilizar a rota oficial de feedbacks recebidos/notificações.
-3. Configurar assinatura, notarização e `NPM_TOKEN` antes da primeira release.
