@@ -339,8 +339,7 @@ export default function FeedbackView({
     }));
   }
 
-  async function submit(event: React.FormEvent): Promise<void> {
-    event.preventDefault();
+  async function submit(): Promise<void> {
     if (busy || !canSubmit) return;
     setBusy(true);
     setSubmitError("");
@@ -425,7 +424,10 @@ export default function FeedbackView({
           <p>Use fatos observáveis e sugestões que a pessoa possa colocar em prática.</p>
         </div>
       </header>
-      <form className="feedback-form structured-feedback-form" onSubmit={submit}>
+      <form
+        className="feedback-form structured-feedback-form"
+        onSubmit={(event) => event.preventDefault()}
+      >
         <div className="wizard-progress-group">
           <div className="wizard-progress-copy">
             <span>Etapa {boundedStepIndex + 1} de {steps.length}</span>
@@ -611,7 +613,12 @@ export default function FeedbackView({
             </button>
           </div>
           {currentStep === "review" ? (
-            <button type="submit" className="primary" disabled={busy || !canSubmit}>
+            <button
+              type="button"
+              className="primary"
+              disabled={busy || !canSubmit}
+              onClick={() => void submit()}
+            >
               {busy ? "Enviando…" : "Concluir envio"}
             </button>
           ) : (
