@@ -4,7 +4,8 @@ import FeedbackView from "./FeedbackView";
 import type {
   AppView,
   DailyQuestion,
-  ReceivedFeedbackResult,
+  FeedbackHistoryItem,
+  FeedbackHistoryResult,
   SessionView
 } from "./contracts";
 
@@ -245,24 +246,72 @@ function QuestionView({
   );
 }
 
-function ReceivedView(): JSX.Element {
-  const [result, setResult] = useState<ReceivedFeedbackResult>();
+function historySections(feedback: FeedbackHistoryItem): Array<[string, string]> {
+  const content = feedback.content;
+  if (feedback.method === "situational") {
+    return [
+      ["Contexto", content.context],
+      ["Comportamento", content.observedBehavior],
+      ["Impacto", content.perceivedImpact],
+      ["Próximo passo", content.suggestedNextStep]
+    ].filter((entry): entry is [string, string] => Boolean(entry[1]));
+  }
+  if (feedback.method === "development") {
+    return [
+      ["Contexto", content.context],
+      ["Continuar", content.continueDoing],
+      ["Começar", content.startDoing],
+      ["Parar", content.stopDoing]
+    ].filter((entry): entry is [string, string] => Boolean(entry[1]));
+  }
+  return [["Feedback", feedback.message]];
+}
+
+function HistoryView({ direction }: { direction: "sent" | "received" }): JSX.Element {
+  const [result, setResult] = useState<FeedbackHistoryResult>();
   const [error, setError] = useState("");
   useEffect(() => {
-    void window.pulseTray.listReceivedFeedback().then(setResult).catch((reason) => setError(messageOf(reason)));
-  }, []);
+    setResult(undefined);
+    setError("");
+    void window.pulseTray.listFeedbackHistory(direction)
+      .then(setResult)
+      .catch((reason) => setError(messageOf(reason)));
+  }, [direction]);
   if (!result && !error) return <PanelLoading label="Buscando feedbacks…" />;
   return (
-    <section className="feedback-pane" aria-label="Feedbacks recebidos">
+    <section
+      className="feedback-pane feedback-history"
+      aria-label={direction === "sent" ? "Feedbacks enviados" : "Feedbacks recebidos"}
+    >
       {error && <ErrorNotice message={error} />}
-      {result && !result.available && (
-        <Empty icon="↙" title="Histórico ainda indisponível" text={result.message ?? "Tente novamente mais tarde."} />
+      {result?.feedbacks.length === 0 && (
+        <Empty
+          icon={direction === "sent" ? "↗" : "↙"}
+          title={direction === "sent" ? "Nenhum feedback enviado" : "Nenhum feedback recebido"}
+          text="Os feedbacks aparecerão aqui sem ocupar o espaço do formulário."
+        />
       )}
       {result?.feedbacks.map((feedback) => (
         <article className="history-card" key={feedback.id}>
-          <div><strong>{feedback.sender ?? "Anônimo"}</strong><time>{dateLabel(feedback.date)}</time></div>
-          <span>{feedback.subDimension} · importância {feedback.importance}</span>
-          <p>{feedback.message}</p>
+          <div>
+            <strong>{feedback.person}</strong>
+            <time>{dateLabel(feedback.date)}</time>
+          </div>
+          <span>
+            {feedback.method === "situational"
+              ? "Feedback situacional"
+              : feedback.method === "development"
+                ? "Feedback de desenvolvimento"
+                : "Feedback"} · importância {feedback.importance}
+          </span>
+          <dl>
+            {historySections(feedback).map(([label, value]) => (
+              <div key={label}>
+                <dt>{label}</dt>
+                <dd>{value}</dd>
+              </div>
+            ))}
+          </dl>
         </article>
       ))}
     </section>
@@ -270,17 +319,23 @@ function ReceivedView(): JSX.Element {
 }
 
 function FeedbacksView({
-  session,
   onChange
 }: {
-  session: SessionView;
   onChange: (session: SessionView) => void;
 }): JSX.Element {
-  const [tab, setTab] = useState<"sent" | "received">("sent");
-  const sentEvents = session.events.filter((event) => event.kind === "feedback-sent");
+  const [tab, setTab] = useState<"new" | "sent" | "received">("new");
   return (
     <Page title="Feedbacks">
-      <div className="tabs" role="tablist" aria-label="Feedbacks enviados e recebidos">
+      <div className="tabs feedback-tabs" role="tablist" aria-label="Criar e consultar feedbacks">
+        <button
+          type="button"
+          role="tab"
+          aria-selected={tab === "new"}
+          className={tab === "new" ? "active" : ""}
+          onClick={() => setTab("new")}
+        >
+          Novo feedback
+        </button>
         <button
           type="button"
           role="tab"
@@ -300,26 +355,9 @@ function FeedbacksView({
           Recebidos
         </button>
       </div>
-      {tab === "sent" ? (
-        <>
-          <FeedbackView embedded onSent={onChange} />
-          <section className="sent-feedback-history" aria-label="Feedbacks enviados recentemente">
-            <h2>Enviados recentemente</h2>
-            {sentEvents.length === 0 ? (
-              <p>Nenhum feedback enviado neste dispositivo.</p>
-            ) : sentEvents.map((event) => (
-              <article className="event-row" key={event.id}>
-                <span className="event-dot feedback-sent" />
-                <div>
-                  <strong>{event.title}</strong>
-                  <p>{event.detail}</p>
-                  <time>{dateLabel(event.at)}</time>
-                </div>
-              </article>
-            ))}
-          </section>
-        </>
-      ) : <ReceivedView />}
+      {tab === "new" && <FeedbackView embedded onSent={onChange} />}
+      {tab === "sent" && <HistoryView direction="sent" />}
+      {tab === "received" && <HistoryView direction="received" />}
     </Page>
   );
 }
@@ -581,7 +619,7 @@ export default function App(): JSX.Element {
         </div>
       </aside>
       <main className="content">
-        {view === "feedbacks" && <FeedbacksView session={session} onChange={setSession} />}
+        {view === "feedbacks" && <FeedbacksView onChange={setSession} />}
         {view === "settings" && <SettingsView session={session} onChange={setSession} />}
       </main>
     </div>

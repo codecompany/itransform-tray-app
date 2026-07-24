@@ -24,31 +24,6 @@ const linkedSession: SessionView = {
   quietHours: []
 };
 
-const feedbackTaxonomy = {
-  indexes: [
-    { id: "ipt", key: "IPT", description: "Índice de Potencial de Transformação" },
-    { id: "iat", key: "IAT", description: "Índice de Ambiente de Trabalho" }
-  ],
-  dimensions: [
-    { id: "dimension-ipt", indexId: "ipt", indexKey: "IPT", name: "Potencial" },
-    {
-      id: "sub-ipt",
-      indexId: "ipt",
-      indexKey: "IPT",
-      parentId: "dimension-ipt",
-      name: "Aprendizado"
-    },
-    { id: "dimension-iat", indexId: "iat", indexKey: "IAT", name: "Confiança" },
-    {
-      id: "sub-iat",
-      indexId: "iat",
-      indexKey: "IAT",
-      parentId: "dimension-iat",
-      name: "Segurança psicológica"
-    }
-  ]
-};
-
 function api(overrides: Partial<PulseTrayApi> = {}): PulseTrayApi {
   return {
     bootstrap: vi.fn().mockResolvedValue(linkedSession),
@@ -60,9 +35,8 @@ function api(overrides: Partial<PulseTrayApi> = {}): PulseTrayApi {
     submitAnswer: vi.fn().mockResolvedValue({ ...linkedSession, lastAnswerDate: "2026-07-23" }),
     skipQuestion: vi.fn().mockResolvedValue(linkedSession),
     listEmployees: vi.fn().mockResolvedValue([]),
-    listFeedbackTaxonomy: vi.fn().mockResolvedValue({ indexes: [], dimensions: [] }),
     sendFeedback: vi.fn().mockResolvedValue(linkedSession),
-    listReceivedFeedback: vi.fn().mockResolvedValue({ available: false, feedbacks: [] }),
+    listFeedbackHistory: vi.fn().mockResolvedValue({ feedbacks: [] }),
     saveQuietHours: vi.fn().mockImplementation(async (quietHours) => ({
       ...linkedSession,
       quietHours
@@ -298,190 +272,247 @@ describe("iTransform Pulse app", () => {
     expect(bridge.openFeedbacks).toHaveBeenCalledOnce();
   });
 
-  it("requires employee, index, dimension and subdimension in that order", async () => {
+  it("asks for a recipient and feedback method without exposing internal taxonomy", async () => {
     const bridge = api({
       listEmployees: vi.fn().mockResolvedValue([
         { id: "employee-2", name: "Bruno Lima", email: "bruno@example.com", position: "Engenheiro" }
-      ]),
-      listFeedbackTaxonomy: vi.fn().mockResolvedValue(feedbackTaxonomy)
+      ])
     });
     window.pulseTray = bridge;
     render(<App />);
 
     const search = await screen.findByLabelText("Nome ou e-mail do colaborador");
-    expect(screen.queryByLabelText("Índice")).not.toBeInTheDocument();
-    expect(screen.queryByLabelText("Mensagem")).not.toBeInTheDocument();
-    expect(bridge.listFeedbackTaxonomy).not.toHaveBeenCalled();
-
+    expect(screen.queryByText("IPT")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Dimensão")).not.toBeInTheDocument();
     await userEvent.click(search);
     await userEvent.click(await screen.findByRole("button", { name: /Bruno Lima/ }));
 
-    expect(await screen.findByLabelText("Índice")).toBeInTheDocument();
-    expect(screen.queryByLabelText("Dimensão")).not.toBeInTheDocument();
-    expect(screen.queryByLabelText("Subdimensão")).not.toBeInTheDocument();
-    expect(screen.queryByLabelText("Mensagem")).not.toBeInTheDocument();
-    expect(bridge.listFeedbackTaxonomy).toHaveBeenCalledOnce();
+    expect(screen.getByRole("radio", { name: /Feedback situacional/ })).toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: /Feedback de desenvolvimento/ })).toBeInTheDocument();
+    expect(screen.queryByLabelText(/Contexto/)).not.toBeInTheDocument();
 
-    await userEvent.selectOptions(screen.getByLabelText("Índice"), "ipt");
-    expect(await screen.findByLabelText("Dimensão")).toBeInTheDocument();
-    expect(screen.queryByLabelText("Subdimensão")).not.toBeInTheDocument();
-
-    await userEvent.selectOptions(screen.getByLabelText("Dimensão"), "dimension-ipt");
-    expect(await screen.findByLabelText("Subdimensão")).toBeInTheDocument();
-    expect(screen.queryByLabelText("Mensagem")).not.toBeInTheDocument();
-
-    await userEvent.selectOptions(screen.getByLabelText("Subdimensão"), "sub-ipt");
-    expect(await screen.findByLabelText("Mensagem")).toBeInTheDocument();
-
-    await userEvent.selectOptions(screen.getByLabelText("Índice"), "iat");
-    expect(screen.getByLabelText("Dimensão")).toHaveValue("");
-    expect(screen.queryByLabelText("Subdimensão")).not.toBeInTheDocument();
-    expect(screen.queryByLabelText("Mensagem")).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("radio", { name: /Feedback situacional/ }));
+    expect(await screen.findByLabelText("Contexto ou fato observado *")).toBeInTheDocument();
+    expect(screen.getByLabelText("Comportamento observado *")).toBeInTheDocument();
+    expect(screen.getByLabelText("Impacto percebido *")).toBeInTheDocument();
+    expect(screen.getByLabelText("Próximo passo sugerido *")).toBeInTheDocument();
   });
 
-  it("keeps employee directory and dimension failures independent and retryable", async () => {
+  it("resets the composer when changing recipient and submits development choices", async () => {
+    const bridge = api({
+      listEmployees: vi.fn().mockResolvedValue([
+        { id: "employee-2", name: "Bruno Lima", email: "bruno@example.com", position: "Engenheiro" }
+      ])
+    });
+    window.pulseTray = bridge;
+    render(<App />);
+
+    await userEvent.click(await screen.findByLabelText("Nome ou e-mail do colaborador"));
+    await userEvent.click(await screen.findByRole("button", { name: /Bruno Lima/ }));
+    await userEvent.click(screen.getByRole("radio", { name: /Feedback situacional/ }));
+    await userEvent.type(screen.getByLabelText("Contexto ou fato observado *"), "Contexto temporário");
+    await userEvent.click(screen.getByRole("button", { name: "Trocar" }));
+    expect(screen.getByLabelText("Nome ou e-mail do colaborador")).toHaveValue("");
+
+    await userEvent.click(screen.getByLabelText("Nome ou e-mail do colaborador"));
+    await userEvent.click(await screen.findByRole("button", { name: /Bruno Lima/ }));
+    await userEvent.click(screen.getByRole("radio", { name: /Feedback de desenvolvimento/ }));
+    await userEvent.type(screen.getByLabelText("Contexto ou evidências *"), "No planejamento");
+    await userEvent.type(screen.getByLabelText("Parar de fazer"), "Mudar prioridades sem alinhamento");
+    await userEvent.click(screen.getByRole("button", { name: "Importância 5 de 5" }));
+    await userEvent.click(screen.getByRole("button", { name: "Enviar feedback" }));
+
+    expect(bridge.sendFeedback).toHaveBeenCalledWith(expect.objectContaining({
+      toEmployeeId: "employee-2",
+      method: "development",
+      importance: 5,
+      content: expect.objectContaining({
+        context: "No planejamento",
+        stopDoing: "Mudar prioridades sem alinhamento"
+      })
+    }));
+  });
+
+  it("keeps employee directory failures retryable", async () => {
     const listEmployees = vi.fn()
       .mockRejectedValueOnce(new Error("Diretório indisponível"))
       .mockResolvedValueOnce([
         { id: "employee-2", name: "Bruno Lima", email: "bruno@example.com", position: "Engenheiro" }
       ]);
-    const listFeedbackTaxonomy = vi.fn()
-      .mockRejectedValueOnce(new Error("Subdimensões indisponíveis"))
-      .mockResolvedValueOnce(feedbackTaxonomy);
-    window.pulseTray = api({ listEmployees, listFeedbackTaxonomy });
+    window.pulseTray = api({ listEmployees });
     render(<App />);
 
     expect(await screen.findByRole("alert")).toHaveTextContent("Diretório indisponível");
     await userEvent.click(screen.getByRole("button", { name: "Tentar carregar colaboradores novamente" }));
-    const search = await screen.findByLabelText("Nome ou e-mail do colaborador");
-    await userEvent.click(search);
-    await userEvent.click(await screen.findByRole("button", { name: /Bruno Lima/ }));
-
-    expect(await screen.findByRole("alert")).toHaveTextContent("Subdimensões indisponíveis");
-    expect(screen.getByText("Bruno Lima")).toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: "Tentar carregar opções novamente" }));
-    expect(await screen.findByLabelText("Índice")).toBeInTheDocument();
+    await userEvent.click(await screen.findByLabelText("Nome ou e-mail do colaborador"));
+    expect(await screen.findByRole("button", { name: /Bruno Lima/ })).toBeInTheDocument();
   });
 
-  it("preserves feedback data on failure and shows the visible 400 character counter", async () => {
-    const bridge = api({
+  it("allows partial development guidance but requires at least one action", async () => {
+    window.pulseTray = api({
       listEmployees: vi.fn().mockResolvedValue([
         { id: "employee-2", name: "Bruno Lima", email: "bruno@example.com", position: "Engenheiro" }
-      ]),
-      listFeedbackTaxonomy: vi.fn().mockResolvedValue(feedbackTaxonomy),
-      sendFeedback: vi.fn().mockRejectedValue(new Error("Falha temporária"))
+      ])
     });
-    window.pulseTray = bridge;
     render(<App />);
-    const search = await screen.findByLabelText("Nome ou e-mail do colaborador");
-    await userEvent.type(search, "bruno@example.com");
+    await userEvent.click(await screen.findByLabelText("Nome ou e-mail do colaborador"));
     await userEvent.click(await screen.findByRole("button", { name: /Bruno Lima/ }));
-    await userEvent.selectOptions(screen.getByLabelText("Índice"), "ipt");
-    await userEvent.selectOptions(screen.getByLabelText("Dimensão"), "dimension-ipt");
-    await userEvent.selectOptions(screen.getByLabelText("Subdimensão"), "sub-ipt");
-    await userEvent.clear(screen.getByLabelText("Mensagem"));
-    await userEvent.type(screen.getByLabelText("Mensagem"), "Ótima colaboração.");
-    expect(screen.getByText("18/400")).toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: "Enviar feedback" }));
-    expect(await screen.findByRole("alert")).toHaveTextContent("Falha temporária");
-    expect(screen.getByLabelText("Mensagem")).toHaveValue("Ótima colaboração.");
+    await userEvent.click(screen.getByRole("radio", { name: /Feedback de desenvolvimento/ }));
+    await userEvent.type(screen.getByLabelText("Contexto ou evidências *"), "Nas últimas entregas");
+    expect(screen.getByRole("button", { name: "Enviar feedback" })).toBeDisabled();
+    await userEvent.type(screen.getByLabelText("Começar a fazer"), "Compartilhe riscos mais cedo");
+    expect(screen.getByRole("button", { name: "Enviar feedback" })).toBeEnabled();
+    expect(screen.getByText("28/600")).toBeInTheDocument();
   });
 
-  it("shows the exact feedback success copy and prevents duplicate submits", async () => {
-    const sentSession: SessionView = {
-      ...linkedSession,
-      events: [{
-        id: "sent-1",
-        kind: "feedback-sent",
-        title: "Feedback enviado para Bruno Lima",
-        detail: "IAT · Confiança · importância 3",
-        at: "2026-07-24T12:00:00Z"
-      }]
-    };
-    let resolveSend: (() => void) | undefined;
-    const sendFeedback = vi.fn(() => new Promise<SessionView>((resolve) => {
-      resolveSend = () => resolve(sentSession);
-    }));
+  it("preserves structured fields on failure", async () => {
     const bridge = api({
       listEmployees: vi.fn().mockResolvedValue([
         { id: "employee-2", name: "Bruno Lima", email: "bruno@example.com", position: "Engenheiro" }
       ]),
-      listFeedbackTaxonomy: vi.fn().mockResolvedValue(feedbackTaxonomy),
-      sendFeedback
+      sendFeedback: vi.fn().mockRejectedValue(new Error("Falha temporária"))
     });
     window.pulseTray = bridge;
     render(<App />);
     await userEvent.type(await screen.findByLabelText("Nome ou e-mail do colaborador"), "Bruno");
     await userEvent.click(await screen.findByRole("button", { name: /Bruno Lima/ }));
-    await userEvent.selectOptions(screen.getByLabelText("Índice"), "iat");
-    await userEvent.selectOptions(screen.getByLabelText("Dimensão"), "dimension-iat");
-    await userEvent.selectOptions(screen.getByLabelText("Subdimensão"), "sub-iat");
-    await userEvent.type(screen.getByLabelText("Mensagem"), "Obrigado!");
+    await userEvent.click(screen.getByRole("radio", { name: /Feedback situacional/ }));
+    await userEvent.type(screen.getByLabelText("Contexto ou fato observado *"), "Na retrospectiva");
+    await userEvent.type(screen.getByLabelText("Comportamento observado *"), "Você trouxe exemplos");
+    await userEvent.type(screen.getByLabelText("Impacto percebido *"), "A conversa ficou objetiva");
+    await userEvent.type(screen.getByLabelText("Próximo passo sugerido *"), "Repita o formato");
+    await userEvent.click(screen.getByRole("button", { name: "Enviar feedback" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Falha temporária");
+    expect(screen.getByLabelText("Comportamento observado *")).toHaveValue("Você trouxe exemplos");
+  });
+
+  it("shows the exact success copy and prevents duplicate submits", async () => {
+    let resolveSend: (() => void) | undefined;
+    const sendFeedback = vi.fn(() => new Promise<SessionView>((resolve) => {
+      resolveSend = () => resolve(linkedSession);
+    }));
+    window.pulseTray = api({
+      listEmployees: vi.fn().mockResolvedValue([
+        { id: "employee-2", name: "Bruno Lima", email: "bruno@example.com", position: "Engenheiro" }
+      ]),
+      sendFeedback
+    });
+    render(<App />);
+    await userEvent.type(await screen.findByLabelText("Nome ou e-mail do colaborador"), "Bruno");
+    await userEvent.click(await screen.findByRole("button", { name: /Bruno Lima/ }));
+    await userEvent.click(screen.getByRole("radio", { name: /Feedback de desenvolvimento/ }));
+    await userEvent.type(screen.getByLabelText("Contexto ou evidências *"), "Nas últimas entregas");
+    await userEvent.type(screen.getByLabelText("Continuar fazendo"), "Continue resumindo decisões");
     const submit = screen.getByRole("button", { name: "Enviar feedback" });
     await userEvent.click(submit);
     expect(submit).toBeDisabled();
     expect(sendFeedback).toHaveBeenCalledOnce();
     resolveSend?.();
     expect(await screen.findByText("Seu feedback foi enviado com sucesso!")).toBeInTheDocument();
-    expect(screen.getByText("Feedback enviado para Bruno Lima")).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Enviar outro feedback" }));
     expect(await screen.findByLabelText("Nome ou e-mail do colaborador")).toHaveValue("");
-    expect(screen.queryByLabelText("Mensagem")).not.toBeInTheDocument();
   });
 
-  it("groups sent and received feedback in tabs", async () => {
-    const bridge = api({
-      bootstrap: vi.fn().mockResolvedValue({
-        ...linkedSession,
-        events: [{
-          id: "event-1",
-          kind: "feedback-sent",
-          title: "Feedback enviado",
-          detail: "IPT · Aprendizado · importância 5",
-          at: "2026-07-23T12:00:00Z"
-        }]
-      }),
-      listReceivedFeedback: vi.fn().mockResolvedValue({
-        available: true,
-        feedbacks: [{
-          id: "feedback-1",
-          sender: "Bruno Lima",
+  it("keeps creation and server-backed histories in separate tabs", async () => {
+    const listFeedbackHistory = vi.fn().mockImplementation(async (direction) => ({
+      feedbacks: direction === "sent" ? [
+        {
+          id: "feedback-situational",
+          person: "Bruno Lima",
           date: "2026-07-22T12:00:00Z",
-          subDimension: "Confiança",
           importance: 4,
-          message: "Obrigado pela parceria."
-        }]
-      })
-    });
-    window.pulseTray = bridge;
+          method: "situational",
+          content: {
+            context: "Durante o planejamento",
+            observedBehavior: "Organizou as decisões",
+            perceivedImpact: "O time ganhou clareza",
+            suggestedNextStep: "Repita o resumo",
+            continueDoing: "",
+            startDoing: "",
+            stopDoing: ""
+          },
+          message: ""
+        },
+        {
+          id: "feedback-development",
+          person: "Diego Melo",
+          date: "2026-07-21T12:00:00Z",
+          importance: 3,
+          method: "development",
+          content: {
+            context: "Nas últimas revisões",
+            observedBehavior: "",
+            perceivedImpact: "",
+            suggestedNextStep: "",
+            continueDoing: "Antecipar os riscos",
+            startDoing: "Registrar decisões",
+            stopDoing: ""
+          },
+          message: ""
+        },
+        {
+          id: "feedback-legacy",
+          person: "Eva Dias",
+          date: "2026-07-20T12:00:00Z",
+          importance: 2,
+          method: "legacy",
+          content: {
+            context: "",
+            observedBehavior: "",
+            perceivedImpact: "",
+            suggestedNextStep: "",
+            continueDoing: "",
+            startDoing: "",
+            stopDoing: ""
+          },
+          message: "Mensagem anterior"
+        }
+      ] : [{
+        id: "feedback-received",
+        person: "Camila Rocha",
+        date: "2026-07-22T12:00:00Z",
+        importance: 4,
+        method: "situational",
+        content: {
+          context: "Durante o planejamento",
+          observedBehavior: "Organizou as decisões",
+          perceivedImpact: "O time ganhou clareza",
+          suggestedNextStep: "Repita o resumo",
+          continueDoing: "",
+          startDoing: "",
+          stopDoing: ""
+        },
+        message: ""
+      }]
+    }));
+    window.pulseTray = api({ listFeedbackHistory });
     render(<App />);
-    expect(await screen.findByRole("tab", { name: "Enviados" })).toHaveAttribute(
+    expect(await screen.findByRole("tab", { name: "Novo feedback" })).toHaveAttribute(
       "aria-selected",
       "true"
     );
-    expect(screen.getByText("Feedback enviado")).toBeInTheDocument();
-    expect(screen.getByText("Enviados recentemente")).toBeInTheDocument();
-    await userEvent.click(await screen.findByRole("tab", { name: "Recebidos" }));
-    expect(await screen.findByText("Obrigado pela parceria.")).toBeInTheDocument();
-    expect(screen.getByText("Bruno Lima")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /Avisos/ })).not.toBeInTheDocument();
+    expect(screen.queryByText("Enviados recentemente")).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("tab", { name: "Enviados" }));
+    expect(await screen.findByText("Bruno Lima")).toBeInTheDocument();
+    expect(screen.getByText("Organizou as decisões")).toBeInTheDocument();
+    expect(screen.getByText("Antecipar os riscos")).toBeInTheDocument();
+    expect(screen.getByText("Mensagem anterior")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("tab", { name: "Recebidos" }));
+    expect(await screen.findByText("Camila Rocha")).toBeInTheDocument();
+    expect(listFeedbackHistory).toHaveBeenCalledWith("sent");
+    expect(listFeedbackHistory).toHaveBeenCalledWith("received");
   });
 
-  it("shows explicit received-feedback unavailability and errors", async () => {
-    const bridge = api({
-      listReceivedFeedback: vi.fn().mockResolvedValue({
-        available: false,
-        feedbacks: [],
-        message: "Contrato ainda indisponível."
-      })
-    });
-    window.pulseTray = bridge;
+  it("shows empty history and query errors", async () => {
+    window.pulseTray = api();
     const rendered = render(<App />);
     await userEvent.click(await screen.findByRole("tab", { name: "Recebidos" }));
-    expect(await screen.findByText("Contrato ainda indisponível.")).toBeInTheDocument();
+    expect(await screen.findByText("Nenhum feedback recebido")).toBeInTheDocument();
     rendered.unmount();
 
-    window.pulseTray = api({ listReceivedFeedback: vi.fn().mockRejectedValue(new Error("Falha na consulta")) });
+    window.pulseTray = api({
+      listFeedbackHistory: vi.fn().mockRejectedValue(new Error("Falha na consulta"))
+    });
     render(<App />);
     await userEvent.click(await screen.findByRole("tab", { name: "Recebidos" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("Falha na consulta");

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ApiError, PulseApiClient, validateFeedbackSelection } from "./pulse-api";
+import { ApiError, PulseApiClient } from "./pulse-api";
 
 function response(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -11,40 +11,6 @@ function response(body: unknown, status = 200): Response {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("PulseApiClient", () => {
-  it("validates the complete index, dimension and subdimension chain", () => {
-    const taxonomy = {
-      indexes: [{ id: "ipt", key: "IPT", description: "Potencial" }],
-      dimensions: [
-        { id: "dimension", indexId: "ipt", indexKey: "IPT", name: "Liderança" },
-        {
-          id: "sub",
-          indexId: "ipt",
-          indexKey: "IPT",
-          parentId: "dimension",
-          name: "Escuta"
-        }
-      ]
-    };
-    const draft = {
-      toEmployeeId: "employee-2",
-      indexId: "ipt",
-      dimensionId: "dimension",
-      subDimensionId: "sub",
-      importance: 4,
-      message: "Boa escuta."
-    };
-
-    expect(validateFeedbackSelection(draft, taxonomy)).toMatchObject({
-      index: { id: "ipt" },
-      dimension: { id: "dimension" },
-      subDimension: { id: "sub" }
-    });
-    expect(() => validateFeedbackSelection(
-      { ...draft, dimensionId: "other" },
-      taxonomy
-    )).toThrow("Seleção de índice, dimensão ou subdimensão inválida");
-  });
-
   it("requests and exchanges the durable tray token without an Authorization header", async () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(response({ message: "E-mail aceito." }, 202))
@@ -292,41 +258,6 @@ describe("PulseApiClient", () => {
     expect(fetchMock.mock.calls[1][0]).toContain("cursor=42");
   });
 
-  it("builds the IPT and IAT feedback taxonomy with root dimensions and subdimensions", async () => {
-    vi.stubGlobal("fetch", vi.fn()
-      .mockResolvedValueOnce(response({
-        dimensions: [
-          { id: "dimension-ipt", indexId: "ipt", name: "Potencial" },
-          {
-            id: "sub-ipt",
-            indexId: "ipt",
-            parentId: "dimension-ipt",
-            name: "Aprendizado"
-          },
-          { id: "dimension-other", indexId: "other", name: "Outro" }
-        ]
-      }))
-      .mockResolvedValueOnce(response({
-        indexes: [
-          { id: "ipt", key: " ipt ", description: "Potencial de transformação" },
-          { id: "other", key: "OUTRO" }
-        ]
-      })));
-    const taxonomy = await new PulseApiClient("https://example.test")
-      .listFeedbackTaxonomy("token", "company-1");
-    expect(taxonomy.indexes).toEqual([
-      {
-        id: "ipt",
-        key: "IPT",
-        description: "Potencial de transformação"
-      }
-    ]);
-    expect(taxonomy.dimensions).toEqual([
-      expect.objectContaining({ id: "dimension-ipt", indexKey: "IPT", name: "Potencial" }),
-      expect.objectContaining({ id: "sub-ipt", indexKey: "IPT", name: "Aprendizado" })
-    ]);
-  });
-
   it("surfaces API errors without exposing response bodies", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(response({ error: "unauthorized" }, 401)));
     await expect(new PulseApiClient("https://example.test").listEmployees("token", "company"))
@@ -356,11 +287,17 @@ describe("PulseApiClient", () => {
       },
       {
         toEmployeeId: "to",
-        indexId: "ipt",
-        dimensionId: "dimension",
-        subDimensionId: "sub",
+        method: "situational",
         importance: 5,
-        message: "  Excelente trabalho.  "
+        content: {
+          context: "  Na apresentação semanal.  ",
+          observedBehavior: "  Explicou os riscos com dados.  ",
+          perceivedImpact: "  A decisão ficou mais segura.  ",
+          suggestedNextStep: "  Continue trazendo os dados antes da reunião.  ",
+          continueDoing: "",
+          startDoing: "",
+          stopDoing: ""
+        }
       }
     );
     const body = JSON.parse(fetchMock.mock.calls[0][1].body);
@@ -373,13 +310,134 @@ describe("PulseApiClient", () => {
       company_id: "company",
       from_employee_id: "from",
       to_employee_id: "to",
-      dimension_id: "dimension",
-      sub_dimension_id: "sub",
-      index_id: "ipt",
+      method: "situational",
       value: "5",
-      text: "Excelente trabalho."
+      content: {
+        context: "Na apresentação semanal.",
+        observed_behavior: "Explicou os riscos com dados.",
+        perceived_impact: "A decisão ficou mais segura.",
+        suggested_next_step: "Continue trazendo os dados antes da reunião.",
+        continue_doing: "",
+        start_doing: "",
+        stop_doing: ""
+      }
     });
-    expect(body.submitted_at).toBeTruthy();
+  });
+
+  it("maps sent and received structured feedback history", async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(response({
+        feedbacks: [{
+          id: "feedback-1",
+          from_employee_id: "from",
+          to_employee_id: "to",
+          method: "development",
+          value: "4",
+          submitted_at: "2026-07-24T12:00:00Z",
+          text: "Contexto: planejamento",
+          content: {
+            context: "Planejamento trimestral",
+            continue_doing: "Antecipar riscos",
+            start_doing: "Registrar decisões",
+            stop_doing: ""
+          },
+          analysis: { status: "completed" }
+        }]
+      }))
+      .mockResolvedValueOnce(response({
+        employees: [{
+          id: "to",
+          firstName: "Bruno",
+          lastName: "Melo",
+          email: "bruno@example.com",
+          position: "PM",
+          status: "active",
+          companyId: "company",
+          userId: "user-to",
+          startDate: ""
+        }]
+      }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await new PulseApiClient("https://example.test").listFeedbackHistory(
+      {
+        employeeId: "from",
+        employeeToken: "employee-token",
+        knowledgeToken: "knowledge-token",
+        pulseToken: "pulse-token",
+        expiresAt: "2026-07-24T20:00:00Z"
+      },
+      {
+        id: "from", companyId: "company", userId: "user", name: "Ana",
+        email: "ana@example.com", position: "Design", startDate: "2025-01-01"
+      },
+      "sent"
+    );
+
+    expect(fetchMock.mock.calls[0][0]).toBe(
+      "https://example.test/v1/pulse/feedbacks/from?direction=sent"
+    );
+    expect(fetchMock.mock.calls[0][1].headers).toMatchObject({
+      Authorization: "Bearer pulse-token",
+      "X-PulseTray-Employee-Token": "employee-token"
+    });
+    expect(result.feedbacks).toEqual([
+      expect.objectContaining({
+        id: "feedback-1",
+        person: "Bruno Melo",
+        personEmail: "bruno@example.com",
+        importance: 4,
+        method: "development",
+        analysisStatus: "completed",
+        content: expect.objectContaining({
+          context: "Planejamento trimestral",
+          continueDoing: "Antecipar riscos",
+          startDoing: "Registrar decisões"
+        })
+      })
+    ]);
+  });
+
+  it("keeps feedback history available when employee hydration fails", async () => {
+    vi.stubGlobal("fetch", vi.fn()
+      .mockResolvedValueOnce(response({
+        feedbacks: [{
+          id: "feedback-1",
+          from_employee_id: "from",
+          to_employee_id: "to",
+          method: "situational",
+          value: "5",
+          submitted_at: "2026-07-24T12:00:00Z",
+          text: "Contexto: reunião",
+          content: { context: "Reunião" },
+          analysis: { status: "queued" }
+        }]
+      }))
+      .mockResolvedValueOnce(response({ error: "directory unavailable" }, 503)));
+
+    const result = await new PulseApiClient("https://example.test").listFeedbackHistory(
+      {
+        employeeId: "from",
+        employeeToken: "employee-token",
+        knowledgeToken: "knowledge-token",
+        pulseToken: "pulse-token",
+        expiresAt: "2026-07-24T20:00:00Z"
+      },
+      {
+        id: "from", companyId: "company", userId: "user", name: "Ana",
+        email: "ana@example.com", position: "Design", startDate: "2025-01-01"
+      },
+      "sent"
+    );
+
+    expect(result.feedbacks).toEqual([
+      expect.objectContaining({
+        id: "feedback-1",
+        person: "Colaborador",
+        method: "situational",
+        analysisStatus: "queued"
+      })
+    ]);
   });
 
   it("translates an invalid feedback target into an actionable message", async () => {
@@ -400,11 +458,17 @@ describe("PulseApiClient", () => {
       },
       {
         toEmployeeId: "to",
-        indexId: "ipt",
-        dimensionId: "dimension",
-        subDimensionId: "sub",
+        method: "development",
         importance: 5,
-        message: "Excelente trabalho."
+        content: {
+          context: "Planejamento trimestral",
+          observedBehavior: "",
+          perceivedImpact: "",
+          suggestedNextStep: "",
+          continueDoing: "Antecipar riscos",
+          startDoing: "",
+          stopDoing: ""
+        }
       }
     );
     await expect(request).rejects.toThrow(

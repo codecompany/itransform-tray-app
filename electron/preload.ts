@@ -14,9 +14,8 @@ const api: PulseTrayApi = {
   submitAnswer: (input) => ipcRenderer.invoke("question:answer", input),
   skipQuestion: () => ipcRenderer.invoke("question:skip"),
   listEmployees: () => ipcRenderer.invoke("feedback:employees"),
-  listFeedbackTaxonomy: () => ipcRenderer.invoke("feedback:taxonomy"),
   sendFeedback: (draft: FeedbackDraft) => ipcRenderer.invoke("feedback:send", draft),
-  listReceivedFeedback: () => ipcRenderer.invoke("feedback:received"),
+  listFeedbackHistory: (direction) => ipcRenderer.invoke("feedback:history", direction),
   saveQuietHours: (windows: QuietHoursWindow[]) =>
     ipcRenderer.invoke("settings:quiet-hours", windows),
   openManagerHub: () => ipcRenderer.invoke("navigation:manager-hub"),

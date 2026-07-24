@@ -67,47 +67,39 @@ export interface EmployeeOption {
   position: string;
 }
 
-export interface FeedbackDimension {
-  id: string;
-  indexId: string;
-  indexKey: "IPT" | "IAT" | string;
-  name: string;
-  parentId?: string;
-}
+export type FeedbackMethod = "situational" | "development";
 
-export interface FeedbackIndex {
-  id: string;
-  key: "IPT" | "IAT" | string;
-  description: string;
-}
-
-export interface FeedbackTaxonomy {
-  indexes: FeedbackIndex[];
-  dimensions: FeedbackDimension[];
+export interface FeedbackContent {
+  context: string;
+  observedBehavior: string;
+  perceivedImpact: string;
+  suggestedNextStep: string;
+  continueDoing: string;
+  startDoing: string;
+  stopDoing: string;
 }
 
 export interface FeedbackDraft {
   toEmployeeId: string;
-  indexId: string;
-  dimensionId: string;
-  subDimensionId: string;
+  method: FeedbackMethod | "";
   importance: number;
-  message: string;
+  content: FeedbackContent;
 }
 
-export interface ReceivedFeedback {
+export interface FeedbackHistoryItem {
   id: string;
-  sender?: string;
+  person: string;
+  personEmail?: string;
   date: string;
-  subDimension: string;
   importance: number;
+  method: FeedbackMethod | "legacy";
+  content: FeedbackContent;
   message: string;
+  analysisStatus?: "queued" | "completed" | "review_required" | "failed";
 }
 
-export interface ReceivedFeedbackResult {
-  available: boolean;
-  feedbacks: ReceivedFeedback[];
-  message?: string;
+export interface FeedbackHistoryResult {
+  feedbacks: FeedbackHistoryItem[];
 }
 
 export interface PulseTrayApi {
@@ -118,9 +110,8 @@ export interface PulseTrayApi {
   submitAnswer(input: { questionId: string; value: string; date: string }): Promise<SessionView>;
   skipQuestion(): Promise<SessionView>;
   listEmployees(): Promise<EmployeeOption[]>;
-  listFeedbackTaxonomy(): Promise<FeedbackTaxonomy>;
   sendFeedback(draft: FeedbackDraft): Promise<SessionView>;
-  listReceivedFeedback(): Promise<ReceivedFeedbackResult>;
+  listFeedbackHistory(direction: "sent" | "received"): Promise<FeedbackHistoryResult>;
   saveQuietHours(windows: QuietHoursWindow[]): Promise<SessionView>;
   openManagerHub(): Promise<void>;
   openFeedbacks(): Promise<void>;
