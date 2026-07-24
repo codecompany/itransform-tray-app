@@ -125,13 +125,11 @@ function TokenScreen({ onLinked }: { onLinked: (session: SessionView) => void })
 function QuestionView({
   required,
   onAnswered,
-  onSkipped,
-  openFeedback
+  onSkipped
 }: {
   required: boolean;
   onAnswered: (session: SessionView) => void;
   onSkipped: (session: SessionView) => void;
-  openFeedback: () => void;
 }): JSX.Element {
   const [question, setQuestion] = useState<DailyQuestion | null>();
   const [selected, setSelected] = useState("");
@@ -179,33 +177,10 @@ function QuestionView({
 
   if (error && !question) return <Page title="Questão diária"><ErrorNotice message={error} /></Page>;
   if (question === undefined) return <PanelLoading label="Buscando a pergunta de hoje…" />;
-  if (!question) {
+  if (!question || question.answered) {
     return (
       <Page title="Questão diária">
-        <Empty icon="○" title="Nada por enquanto" text="Ainda não há uma pergunta disponível para hoje." />
-      </Page>
-    );
-  }
-  if (question.answered) {
-    const pendingSync = question.answerStatus === "pending-sync";
-    const external = question.answerStatus === "external";
-    return (
-      <Page title="Questão diária">
-        <div className="success-card">
-          <span className="success-mark">✓</span>
-          <span className="eyebrow">
-            {pendingSync ? "Resposta salva" : external ? "Resposta já registrada" : "Resposta registrada"}
-          </span>
-          <h2>Obrigado por compartilhar seu pulso de hoje.</h2>
-          <p>
-            {pendingSync
-              ? "Sua resposta está protegida neste dispositivo e será sincronizada automaticamente."
-              : external
-                ? "O iTransform Pulse confirmou a resposta enviada por outro canal."
-                : "Você concluiu a pergunta diária. Que tal reconhecer alguém agora?"}
-          </p>
-          <button className="secondary" onClick={openFeedback}>Enviar feedback</button>
-        </div>
+        <div className="empty"><p>Não há mensagens para exibir.</p></div>
       </Page>
     );
   }
@@ -576,7 +551,6 @@ export default function App(): JSX.Element {
               setSession(next);
               setRequired(false);
             }}
-            openFeedback={() => void window.pulseTray.openFeedbacks()}
           />
         </div>
       </main>

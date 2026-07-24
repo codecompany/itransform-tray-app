@@ -210,8 +210,8 @@ describe("iTransform Pulse app", () => {
       value: "5",
       date: "2026-07-23"
     });
-    expect(await screen.findByText("Obrigado por compartilhar seu pulso de hoje.")).toBeInTheDocument();
-    expect(screen.getByText(/sincronizada automaticamente/)).toBeInTheDocument();
+    expect(await screen.findByText("Não há mensagens para exibir.")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Enviar feedback" })).not.toBeInTheDocument();
   });
 
   it("lets the employee skip from the independent question window", async () => {
@@ -241,7 +241,7 @@ describe("iTransform Pulse app", () => {
     window.history.replaceState({}, "", "/?surface=question");
     window.pulseTray = api();
     render(<App />);
-    expect(await screen.findByText("Nada por enquanto")).toBeInTheDocument();
+    expect(await screen.findByText("Não há mensagens para exibir.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Fechar questão diária" })).toBeInTheDocument();
   });
 
@@ -279,7 +279,7 @@ describe("iTransform Pulse app", () => {
     expect(choice).toHaveAttribute("aria-checked", "true");
   });
 
-  it("opens the regular feedback panel from a completed daily question", async () => {
+  it("shows only the empty message after a daily question was answered elsewhere", async () => {
     window.history.replaceState({}, "", "/?surface=question");
     const bridge = api({
       getQuestion: vi.fn().mockResolvedValue({
@@ -292,8 +292,10 @@ describe("iTransform Pulse app", () => {
     });
     window.pulseTray = bridge;
     render(<App />);
-    await userEvent.click(await screen.findByRole("button", { name: "Enviar feedback" }));
-    expect(bridge.openFeedbacks).toHaveBeenCalledOnce();
+    expect(await screen.findByText("Não há mensagens para exibir.")).toBeInTheDocument();
+    expect(screen.queryByText("Obrigado por compartilhar seu pulso de hoje.")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Enviar feedback" })).not.toBeInTheDocument();
+    expect(bridge.openFeedbacks).not.toHaveBeenCalled();
   });
 
   it("asks for a recipient and feedback method without exposing internal taxonomy", async () => {
