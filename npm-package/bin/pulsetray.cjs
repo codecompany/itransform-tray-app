@@ -7,7 +7,7 @@ const { spawn } = require("node:child_process");
 const pkg = require("../package.json");
 
 if (process.argv.includes("--help") || process.argv.includes("-h")) {
-  console.log(`PulseTray ${pkg.version}
+  console.log(`iTransform Pulse ${pkg.version}
 
 Uso:
   pulsetray             Inicia o aplicativo
@@ -16,13 +16,13 @@ Uso:
   process.exit(0);
 }
 if (process.argv.includes("--version") || process.argv.includes("-v")) {
-  console.log(`PulseTray ${pkg.version}`);
+  console.log(`iTransform Pulse ${pkg.version}`);
   process.exit(0);
 }
 
 const executable = process.platform === "darwin"
-  ? path.join(__dirname, "..", "native", "PulseTray.app", "Contents", "MacOS", "PulseTray")
-  : path.join(__dirname, "..", "native", "PulseTray.exe");
+  ? path.join(__dirname, "..", "native", "iTransform Pulse.app", "Contents", "MacOS", "iTransform Pulse")
+  : path.join(__dirname, "..", "native", "iTransform Pulse.exe");
 
 if (process.platform !== "darwin" && process.platform !== "win32") {
   console.error(`pulsetray: sistema não suportado: ${process.platform}`);

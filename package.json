@@ -1,9 +1,9 @@
 {
   "name": "pulsetray",
-  "version": "0.1.9",
+  "version": "0.1.10",
   "private": true,
   "type": "module",
-  "description": "PulseTray desktop client for Sintonia",
+  "description": "iTransform Pulse desktop client",
   "author": "Code Company",
   "main": "dist/main/electron/main.js",
   "scripts": {
@@ -27,8 +27,8 @@
     "smoke:npm": "node npm-package/test/smoke.cjs"
   },
   "build": {
-    "appId": "com.codecompany.sintonia.pulsetray",
-    "productName": "PulseTray",
+    "appId": "com.codecompany.itransform.pulse",
+    "productName": "iTransform Pulse",
     "directories": {
       "output": "release"
     },
@@ -48,13 +48,13 @@
       "icon": "assets/icon.png"
     },
     "nsis": {
-      "artifactName": "PulseTray-Setup-${version}-windows-${arch}.${ext}",
+      "artifactName": "iTransform-Pulse-Setup-${version}-windows-${arch}.${ext}",
       "oneClick": false,
       "perMachine": false,
       "allowElevation": true
     },
     "portable": {
-      "artifactName": "PulseTray-${version}-windows-${arch}-portable.${ext}"
+      "artifactName": "iTransform-Pulse-${version}-windows-${arch}-portable.${ext}"
     },
     "mac": {
       "category": "public.app-category.productivity",
@@ -67,7 +67,7 @@
         "zip"
       ],
       "icon": "assets/icon.png",
-      "artifactName": "PulseTray-${version}-mac-${arch}.${ext}"
+      "artifactName": "iTransform-Pulse-${version}-mac-${arch}.${ext}"
     }
   },
   "dependencies": {

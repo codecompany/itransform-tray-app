@@ -27,7 +27,7 @@ export function notificationFor(kind: NativeNotificationKind): NativeNotificatio
       };
     case "linked":
       return {
-        body: "Este dispositivo foi vinculado ao Sintonia.",
+        body: "Este dispositivo foi vinculado ao iTransform Pulse.",
         required: false,
         view: "feedback"
       };

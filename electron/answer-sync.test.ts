@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { syncNextAnswer } from "./answer-sync";
-import { ApiError } from "./sintonia";
+import { ApiError } from "./pulse-api";
 import { emptyDailyState, queueAnswer } from "./question-state";
 
 const now = new Date(2026, 6, 24, 10, 0, 0);

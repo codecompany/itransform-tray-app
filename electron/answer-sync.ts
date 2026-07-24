@@ -1,5 +1,5 @@
 import type { DailyQuestion } from "../src/contracts.js";
-import { ApiError } from "./sintonia.js";
+import { ApiError } from "./pulse-api.js";
 import {
   deferAnswer,
   dueAnswer,

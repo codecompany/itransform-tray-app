@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ApiError, SintoniaClient, validateFeedbackSelection } from "./sintonia";
+import { ApiError, PulseApiClient, validateFeedbackSelection } from "./pulse-api";
 
 function response(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -10,7 +10,7 @@ function response(body: unknown, status = 200): Response {
 
 afterEach(() => vi.unstubAllGlobals());
 
-describe("SintoniaClient", () => {
+describe("PulseApiClient", () => {
   it("validates the complete index, dimension and subdimension chain", () => {
     const taxonomy = {
       indexes: [{ id: "ipt", key: "IPT", description: "Potencial" }],
@@ -45,7 +45,7 @@ describe("SintoniaClient", () => {
     )).toThrow("Seleção de índice, dimensão ou subdimensão inválida");
   });
 
-  it("requests and exchanges the durable PulseTray token without an Authorization header", async () => {
+  it("requests and exchanges the durable tray token without an Authorization header", async () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(response({ message: "E-mail aceito." }, 202))
       .mockResolvedValueOnce(response({
@@ -56,7 +56,7 @@ describe("SintoniaClient", () => {
         expiresAt: "2026-07-23T22:00:00Z"
       }));
     vi.stubGlobal("fetch", fetchMock);
-    const client = new SintoniaClient("https://example.test");
+    const client = new PulseApiClient("https://example.test");
 
     await expect(client.requestAccess("ana@example.com")).resolves.toEqual({ message: "E-mail aceito." });
     await expect(client.exchangeTrayToken("pt_live_token")).resolves.toMatchObject({
@@ -96,14 +96,14 @@ describe("SintoniaClient", () => {
       }));
     vi.stubGlobal("fetch", fetchMock);
 
-    const profile = await new SintoniaClient("https://example.test").link("employee-token", "employee-1");
+    const profile = await new PulseApiClient("https://example.test").link("employee-token", "employee-1");
     expect(profile).toMatchObject({ id: "employee-1", name: "Ana Silva", managerName: "Caio Souza" });
     expect(fetchMock.mock.calls[0][0]).toBe("https://example.test/v1/employees/employee-1");
     expect(fetchMock.mock.calls[0][1].headers.Authorization).toContain("Bearer ");
   });
 
   it("rejects a session without an employee ID", async () => {
-    await expect(new SintoniaClient().link("employee-token", undefined)).rejects.toMatchObject({
+    await expect(new PulseApiClient().link("employee-token", undefined)).rejects.toMatchObject({
       code: "SESSION_IDENTITY_MISSING",
       status: 400
     });
@@ -121,7 +121,7 @@ describe("SintoniaClient", () => {
       startDate: "2025-01-02T00:00:00Z"
     }));
     vi.stubGlobal("fetch", fetchMock);
-    const profile = await new SintoniaClient("https://example.test/")
+    const profile = await new PulseApiClient("https://example.test/")
       .link("employee-token", "employee-2");
     expect(profile.name).toBe("fallback@example.com");
     expect(fetchMock.mock.calls[0][0]).toBe("https://example.test/v1/employees/employee-2");
@@ -141,13 +141,13 @@ describe("SintoniaClient", () => {
         startDate: "2025-01-02T00:00:00Z"
       }))
       .mockResolvedValueOnce(response({ error: "not found" }, 404)));
-    const profile = await new SintoniaClient("https://example.test").link("employee-token", "employee-1");
+    const profile = await new PulseApiClient("https://example.test").link("employee-token", "employee-1");
     expect(profile.managerName).toBeUndefined();
   });
 
   it("maps a missing scheduled question to null", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(response({ error: "not found" }, 404)));
-    await expect(new SintoniaClient("https://example.test").getQuestion("token", "employee-1"))
+    await expect(new PulseApiClient("https://example.test").getQuestion("token", "employee-1"))
       .resolves.toBeNull();
   });
 
@@ -159,7 +159,7 @@ describe("SintoniaClient", () => {
       question: { id: "question-1", text: "Pergunta?", choices: [] }
     })));
 
-    await expect(new SintoniaClient("https://example.test").getQuestion("token", "employee-1"))
+    await expect(new PulseApiClient("https://example.test").getQuestion("token", "employee-1"))
       .resolves.toMatchObject({ answered: true, answerStatus: "external" });
   });
 
@@ -170,14 +170,14 @@ describe("SintoniaClient", () => {
       question: { id: "question-1", text: "Pergunta?", choices: [] }
     })));
 
-    await expect(new SintoniaClient("https://example.test").getQuestion("token", "employee-1"))
+    await expect(new PulseApiClient("https://example.test").getQuestion("token", "employee-1"))
       .resolves.toMatchObject({ answered: false, answerStatus: "unanswered" });
   });
 
   it("submits the exact Pulse answer contract", async () => {
     const fetchMock = vi.fn().mockResolvedValue(response({ status: "answer submitted successfully" }));
     vi.stubGlobal("fetch", fetchMock);
-    await new SintoniaClient("https://example.test").submitAnswer("token", "employee-1", "question-1", "5");
+    await new PulseApiClient("https://example.test").submitAnswer("token", "employee-1", "question-1", "5");
     expect(fetchMock.mock.calls[0][0]).toBe("https://example.test/v1/pulse/answer/employee-1");
     expect(fetchMock.mock.calls[0][1]).toMatchObject({
       method: "POST",
@@ -202,13 +202,13 @@ describe("SintoniaClient", () => {
         }
       ]
     })));
-    const employees = await new SintoniaClient("https://example.test").listEmployees("token", "c 1");
+    const employees = await new PulseApiClient("https://example.test").listEmployees("token", "c 1");
     expect(employees.map((employee) => employee.name)).toEqual(["Ana Lima", "Bruno Melo"]);
   });
 
   it("rejects an employee-directory request without a company ID", async () => {
     vi.stubGlobal("fetch", vi.fn());
-    await expect(new SintoniaClient("https://example.test").listEmployees("token", " "))
+    await expect(new PulseApiClient("https://example.test").listEmployees("token", " "))
       .rejects.toMatchObject({ code: "COMPANY_ID_MISSING", status: 400 });
     expect(fetch).not.toHaveBeenCalled();
   });
@@ -229,7 +229,7 @@ describe("SintoniaClient", () => {
       .mockResolvedValueOnce(response({ employees: [employee("1", "Ana")], nextCursor: 42 }))
       .mockResolvedValueOnce(response({ employees: [employee("2", "Bruno")], nextCursor: 0 }));
     vi.stubGlobal("fetch", fetchMock);
-    const employees = await new SintoniaClient("https://example.test").listEmployees("token", "company");
+    const employees = await new PulseApiClient("https://example.test").listEmployees("token", "company");
     expect(employees).toHaveLength(2);
     expect(fetchMock.mock.calls[1][0]).toContain("cursor=42");
   });
@@ -254,7 +254,7 @@ describe("SintoniaClient", () => {
           { id: "other", key: "OUTRO" }
         ]
       })));
-    const taxonomy = await new SintoniaClient("https://example.test")
+    const taxonomy = await new PulseApiClient("https://example.test")
       .listFeedbackTaxonomy("token", "company-1");
     expect(taxonomy.indexes).toEqual([
       {
@@ -271,20 +271,20 @@ describe("SintoniaClient", () => {
 
   it("surfaces API errors without exposing response bodies", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(response({ error: "unauthorized" }, 401)));
-    await expect(new SintoniaClient("https://example.test").listEmployees("token", "company"))
+    await expect(new PulseApiClient("https://example.test").listEmployees("token", "company"))
       .rejects.toEqual(new ApiError("unauthorized", 401, undefined));
   });
 
   it("uses the generic status message when an API error is not JSON", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("bad gateway", { status: 502 })));
-    await expect(new SintoniaClient("https://example.test").listEmployees("token", "company"))
-      .rejects.toEqual(new ApiError("A API Sintonia respondeu 502.", 502, undefined));
+    await expect(new PulseApiClient("https://example.test").listEmployees("token", "company"))
+      .rejects.toEqual(new ApiError("A API iTransform Pulse respondeu 502.", 502, undefined));
   });
 
   it("sends the exact structured feedback contract", async () => {
     const fetchMock = vi.fn().mockResolvedValue(response({ status: "created", id: "feedback-1" }, 201));
     vi.stubGlobal("fetch", fetchMock);
-    await new SintoniaClient("https://example.test").sendFeedback(
+    await new PulseApiClient("https://example.test").sendFeedback(
       {
         employeeId: "from",
         employeeToken: "employee-token",
@@ -328,7 +328,7 @@ describe("SintoniaClient", () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(
       response({ error: "invalid feedback target" }, 500)
     ));
-    const request = new SintoniaClient("https://example.test").sendFeedback(
+    const request = new PulseApiClient("https://example.test").sendFeedback(
       {
         employeeId: "from",
         employeeToken: "employee-token",

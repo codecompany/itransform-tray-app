@@ -1,4 +1,4 @@
-name: Release PulseTray
+name: Release iTransform Pulse
 
 on:
   push:
@@ -89,7 +89,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          APP_PATH="$(find release -type d -name 'PulseTray.app' | head -n 1)"
+          APP_PATH="$(find release -type d -name 'iTransform Pulse.app' | head -n 1)"
           codesign --verify --deep --strict --verbose=2 "${APP_PATH}"
       - name: Notarize macOS artifacts when configured
         if: ${{ env.NOTARY_API_KEY_BASE64 != '' && env.NOTARY_API_KEY_ID != '' && env.NOTARY_API_ISSUER != '' }}

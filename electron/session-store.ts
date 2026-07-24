@@ -1,7 +1,7 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import type { ActivityEvent, EmployeeProfile } from "../src/contracts.js";
-import type { AccessTokenBundle } from "./sintonia.js";
+import type { AccessTokenBundle } from "./pulse-api.js";
 import {
   emptyDailyState,
   normalizeDailyState,
@@ -81,7 +81,7 @@ export class SessionStore {
     };
     this.event({
       kind: "system",
-      title: "PulseTray vinculado",
+      title: "iTransform Pulse vinculado",
       detail: `Olá, ${profile.name}. Sua conta está pronta.`
     });
     await this.save();

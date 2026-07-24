@@ -125,7 +125,7 @@ export default function FeedbackView(): JSX.Element {
         <div className="success-card">
           <span className="success-mark">✓</span>
           <h2>Seu feedback foi enviado com sucesso!</h2>
-          <p>O Sintonia cuidará da entrega e do impacto analítico.</p>
+          <p>O iTransform Pulse cuidará da entrega e do impacto analítico.</p>
           <button
             className="secondary"
             onClick={() => {

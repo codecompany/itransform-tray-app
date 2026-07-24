@@ -2,11 +2,11 @@
 
 **Status:** Accepted
 **Date:** 2026-07-24
-**Deciders:** Sintonia team
+**Deciders:** iTransform team
 
 ## Context
 
-PulseTray may reach the daily question while the Pulse API is unavailable.
+iTransform Pulse may reach the daily question while the Pulse API is unavailable.
 Employees can also answer the same question through Slack or email. Waiting for
 the server before confirming a desktop answer makes an outage visible in the
 core experience, while blind retries can overwrite an answer from another
@@ -25,7 +25,7 @@ channel.
 - Every synchronization attempt calls the official question endpoint first.
   If `answered` is true, the local item is resolved as an external answer and
   is not submitted.
-- If the question remains unanswered, PulseTray submits the queued value.
+- If the question remains unanswered, iTransform Pulse submits the queued value.
   The server atomically preserves the first answer. HTTP `409` is also treated
   defensively as an external winner for compatibility with older deployments.
   Other failures keep the outbox item and schedule bounded exponential backoff

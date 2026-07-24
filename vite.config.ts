@@ -27,7 +27,7 @@ export default defineConfig({
         "electron/question-state.ts",
         "electron/scheduler.ts",
         "electron/session-store.ts",
-        "electron/sintonia.ts",
+        "electron/pulse-api.ts",
         "electron/window-mode.ts"
       ],
       exclude: ["src/main.tsx", "src/global.d.ts", "src/preview.ts"],

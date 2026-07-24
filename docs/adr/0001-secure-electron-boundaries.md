@@ -1,12 +1,13 @@
-# ADR-0001: Fronteiras seguras e distribuição do PulseTray
+# ADR-0001: Fronteiras seguras e distribuição do iTransform Pulse
 
 **Status:** Accepted  
 **Date:** 2026-07-23  
-**Deciders:** Equipe Sintonia
+**Updated:** 2026-07-24
+**Deciders:** Equipe iTransform
 
 ## Context
 
-O PulseTray recebe um token de colaborador, executa em segundo plano e abre uma
+O iTransform Pulse recebe um token de colaborador, executa em segundo plano e abre uma
 janela diária obrigatória. O renderer não deve obter credenciais, módulos Node
 ou acesso direto a serviços internos. A distribuição também precisa oferecer
 instaladores tradicionais e um pacote npm pequeno, sem incorporar outro
@@ -35,6 +36,18 @@ Electron no pacote.
   retornado pela API oficial, e as duas consultas têm recuperação independente.
 - Lembretes e confirmações são enviados pelo sistema operacional. O conteúdo
   nativo é genérico e não contém token, nome, e-mail ou mensagem de feedback.
+- Clicar no ícone do tray abre somente o menu nativo. Apenas ações explícitas
+  de feedback ou configurações abrem a janela regular; a questão diária
+  mantém sua ação manual e seu disparo automático.
+- O macOS recebe uma imagem Template monocromática com fundo transparente.
+  O sistema operacional aplica o contraste correto para cada aparência.
+- Interfaces, notificações e metadados de aplicativo usam o nome
+  `iTransform Pulse`. O pacote npm, o comando `pulsetray`, as variáveis
+  `PULSETRAY_*` e os headers `X-PulseTray-*` permanecem estáveis como
+  identificadores de compatibilidade.
+- O processo principal mantém o diretório técnico de dados da versão anterior
+  para preservar a sessão criptografada, a resposta pendente e a heurística de
+  lembrete durante a atualização.
 - O pacote npm baixa o artefato portátil da mesma versão, valida o SHA-256 e
   instala por troca atômica.
 

@@ -2,7 +2,7 @@
 
 ## Scope and assets
 
-This model covers the local helper that publishes the first public PulseTray
+This model covers the local helper that publishes the first public iTransform Pulse
 package version, creates one granular npm token, and stores it as the
 repository's `NPM_TOKEN` Actions secret. The assets are the unpublished package
 version, npm account password, emailed OTPs, reusable npm token, and GitHub
