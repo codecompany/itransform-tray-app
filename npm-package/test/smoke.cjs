@@ -47,21 +47,30 @@ async function main() {
   const temporary = await fs.promises.mkdtemp(path.join(os.tmpdir(), "pulsetray-smoke-"));
   const packageRoot = path.resolve(__dirname, "..");
   const version = require(path.join(packageRoot, "package.json")).version;
-  const asset = `PulseTray-${version}-mac-${process.arch}.zip`;
+  const asset = `iTransform-Pulse-${version}-mac-${process.arch}.zip`;
   const release = path.join(temporary, "release");
   const npmCache = path.join(temporary, "npm-cache");
-  const payload = path.join(temporary, "payload", "PulseTray.app", "Contents", "MacOS");
+  const payload = path.join(temporary, "payload", "iTransform Pulse.app", "Contents", "MacOS");
   const prefix = path.join(temporary, "prefix");
   const marker = path.join(temporary, "started");
   await fs.promises.mkdir(release, { recursive: true });
   await fs.promises.mkdir(payload, { recursive: true });
-  const executable = path.join(payload, "PulseTray");
+  const executable = path.join(payload, "iTransform Pulse");
   await fs.promises.writeFile(
     executable,
     "#!/bin/sh\nprintf started > \"${PULSETRAY_SMOKE_MARKER}\"\n",
     { mode: 0o755 }
   );
-  run("/usr/bin/ditto", ["-c", "-k", "--keepParent", path.join(temporary, "payload", "PulseTray.app"), path.join(release, asset)]);
+  run(
+    "/usr/bin/ditto",
+    [
+      "-c",
+      "-k",
+      "--keepParent",
+      path.join(temporary, "payload", "iTransform Pulse.app"),
+      path.join(release, asset)
+    ]
+  );
   const bytes = await fs.promises.readFile(path.join(release, asset));
   const sum = crypto.createHash("sha256").update(bytes).digest("hex");
   await fs.promises.writeFile(path.join(release, "SHA256SUMS.txt"), `${sum}  ${asset}\n`);
@@ -92,7 +101,9 @@ async function main() {
     });
     const launcher = path.join(prefix, "bin", "pulsetray");
     const versionOutput = run(launcher, ["--version"]);
-    if (versionOutput !== `PulseTray ${version}`) throw new Error(`unexpected version: ${versionOutput}`);
+    if (versionOutput !== `iTransform Pulse ${version}`) {
+      throw new Error(`unexpected version: ${versionOutput}`);
+    }
     run(launcher, ["--smoke"], { env: { ...process.env, PULSETRAY_SMOKE_MARKER: marker } });
     await waitFor(marker);
     console.log("Portable npm install and launcher smoke passed.");

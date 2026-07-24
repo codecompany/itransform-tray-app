@@ -6,11 +6,11 @@ Accepted (2026-07-23 UTC).
 
 ## Decision request
 
-Code Company accepts a local bootstrap for the first public PulseTray package
+Code Company accepts a local bootstrap for the first public iTransform Pulse package
 and its publishing credential on 2026-07-23 UTC. The script targets one
 published package version and one successful GitHub secret write, from zero
 published versions and zero valid secret writes in the failed attempts recorded
-in the task shell output. The PulseTray repository owner executes it.
+in the task shell output. The iTransform Pulse repository owner executes it.
 
 ## Context
 
@@ -22,7 +22,7 @@ then returned `E401` because `--scopes codecompany` grants organization
 management access rather than package publishing access. A third attempt
 returned `E403` before any OTP challenge because publishing now requires
 account 2FA or a granular write token configured to bypass 2FA. A
-package-specific token cannot target PulseTray until its first version exists.
+package-specific token cannot target iTransform Pulse until its first version exists.
 Further registry inspection showed that `codecompany` is a user-owned npm
 namespace rather than the intended organization. The correct npm organization
 is `code-company`; `osvaldoandrade` is its owner and belongs to

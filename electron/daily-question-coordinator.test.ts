@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { DailyQuestion } from "../src/contracts";
-import { ApiError } from "./sintonia";
+import { ApiError } from "./pulse-api";
 import { DailyQuestionCoordinator } from "./daily-question-coordinator";
 import { SessionStore } from "./session-store";
 

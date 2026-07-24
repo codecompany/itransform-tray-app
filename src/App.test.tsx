@@ -72,7 +72,7 @@ beforeEach(() => {
   vi.stubGlobal("confirm", vi.fn().mockReturnValue(true));
 });
 
-describe("PulseTray app", () => {
+describe("iTransform Pulse app", () => {
   it("requests a token using the corporate email without exposing account existence", async () => {
     const bridge = api({
       bootstrap: vi.fn().mockResolvedValue({

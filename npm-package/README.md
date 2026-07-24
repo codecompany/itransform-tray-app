@@ -1,6 +1,6 @@
-# PulseTray
+# iTransform Pulse
 
-Este pacote instala a versão portátil do PulseTray a partir da GitHub Release
+Este pacote instala a versão portátil do iTransform Pulse a partir da GitHub Release
 correspondente. O download é validado com SHA-256 e não executa instaladores
 administrativos.
 

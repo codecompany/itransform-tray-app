@@ -63,7 +63,7 @@ function TokenScreen({ onLinked }: { onLinked: (session: SessionView) => void })
     <main className="welcome">
       <section className="welcome-card auth-card">
         <img src={logo} className="brand-logo" alt="iTransform" />
-        <span className="eyebrow">PulseTray</span>
+        <span className="eyebrow">iTransform Pulse</span>
         <h1>Seu pulso diário, sem interromper o ritmo.</h1>
         <p>Informe seu e-mail corporativo. Enviaremos um token pessoal para vincular este dispositivo.</p>
         {success ? (
@@ -200,7 +200,7 @@ function QuestionView({
             {pendingSync
               ? "Sua resposta está protegida neste dispositivo e será sincronizada automaticamente."
               : external
-                ? "O Sintonia confirmou a resposta enviada por outro canal."
+                ? "O iTransform Pulse confirmou a resposta enviada por outro canal."
                 : "Você concluiu a pergunta diária. Que tal reconhecer alguém agora?"}
           </p>
           <button className="secondary" onClick={openFeedback}>Enviar feedback</button>
@@ -239,7 +239,7 @@ function QuestionView({
             Pular por agora
           </button>
         </div>
-        {required && <small>Se pular, o PulseTray perguntará novamente mais tarde.</small>}
+        {required && <small>Se pular, o iTransform Pulse perguntará novamente mais tarde.</small>}
       </div>
     </Page>
   );
@@ -298,7 +298,7 @@ function SettingsView({
       <section className="settings-form">
         <strong>Pergunta diária automática</strong>
         <p>
-          O PulseTray verifica a pergunta no primeiro acesso e pela manhã. Se você pular,
+          O iTransform Pulse verifica a pergunta no primeiro acesso e pela manhã. Se você pular,
           ele perguntará novamente mais tarde.
         </p>
       </section>
@@ -353,7 +353,7 @@ export default function App(): JSX.Element {
   }, []);
 
   if (error) return <main className="fatal"><ErrorNotice message={error} /></main>;
-  if (!session) return <PanelLoading label="Abrindo o PulseTray…" />;
+  if (!session) return <PanelLoading label="Abrindo o iTransform Pulse…" />;
   if (!session.linked) return <TokenScreen onLinked={setSession} />;
 
   if (view === "question") {

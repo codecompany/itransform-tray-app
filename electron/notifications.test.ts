@@ -22,7 +22,7 @@ describe("native notification policy", () => {
 
   it("uses a generic native notice for linking", () => {
     expect(notificationFor("linked")).toEqual({
-      body: "Este dispositivo foi vinculado ao Sintonia.",
+      body: "Este dispositivo foi vinculado ao iTransform Pulse.",
       required: false,
       view: "feedback"
     });

@@ -82,7 +82,7 @@ function employeeName(employee: EmployeeRecord): string {
   return `${employee.firstName ?? ""} ${employee.lastName ?? ""}`.trim() || employee.email;
 }
 
-export class SintoniaClient {
+export class PulseApiClient {
   constructor(private readonly baseUrl = process.env.PULSETRAY_API_URL ?? "https://api.storifly.ai") {}
 
   private async request<T>(path: string, token: string | undefined, init: RequestInit = {}): Promise<T> {
@@ -98,7 +98,11 @@ export class SintoniaClient {
     });
     if (!response.ok) {
       const body = await response.json().catch(() => ({})) as { error?: string; code?: string };
-      throw new ApiError(body.error || `A API Sintonia respondeu ${response.status}.`, response.status, body.code);
+      throw new ApiError(
+        body.error || `A API iTransform Pulse respondeu ${response.status}.`,
+        response.status,
+        body.code
+      );
     }
     return response.json() as Promise<T>;
   }

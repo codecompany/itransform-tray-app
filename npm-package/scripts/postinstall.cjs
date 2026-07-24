@@ -15,10 +15,10 @@ function fail(message) {
 
 function target(platform, arch, version) {
   if (platform === "darwin" && (arch === "x64" || arch === "arm64")) {
-    return `PulseTray-${version}-mac-${arch}.zip`;
+    return `iTransform-Pulse-${version}-mac-${arch}.zip`;
   }
   if (platform === "win32" && arch === "x64") {
-    return `PulseTray-${version}-windows-x64-portable.exe`;
+    return `iTransform-Pulse-${version}-windows-x64-portable.exe`;
   }
   return null;
 }
@@ -108,12 +108,14 @@ async function install(downloaded, root) {
     const result = spawnSync("/usr/bin/ditto", ["-x", "-k", downloaded, next], { stdio: "inherit" });
     if (result.status !== 0) throw new Error("não foi possível extrair o pacote macOS");
   } else {
-    await fs.promises.rename(downloaded, path.join(next, "PulseTray.exe"));
+    await fs.promises.rename(downloaded, path.join(next, "iTransform Pulse.exe"));
   }
   const executable = process.platform === "darwin"
-    ? path.join(next, "PulseTray.app", "Contents", "MacOS", "PulseTray")
-    : path.join(next, "PulseTray.exe");
-  if (!fs.existsSync(executable)) throw new Error("o artefato portátil não contém o executável PulseTray");
+    ? path.join(next, "iTransform Pulse.app", "Contents", "MacOS", "iTransform Pulse")
+    : path.join(next, "iTransform Pulse.exe");
+  if (!fs.existsSync(executable)) {
+    throw new Error("o artefato portátil não contém o executável iTransform Pulse");
+  }
   await fs.promises.rm(previous, { recursive: true, force: true });
   if (fs.existsSync(root)) await fs.promises.rename(root, previous);
   try {

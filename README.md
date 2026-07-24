@@ -1,6 +1,6 @@
-# PulseTray
+# iTransform Pulse
 
-Aplicativo Electron compacto do Sintonia para a pergunta diária e feedbacks.
+Aplicativo Electron compacto da plataforma iTransform para a pergunta diária e feedbacks.
 Ele permanece na área de notificação, inicia com o sistema e verifica a pergunta
 no primeiro acesso e pela manhã. Quando disponível, abre a experiência em tela
 cheia. O colaborador pode responder ou usar **Agora não**; nesse caso, uma
@@ -58,7 +58,9 @@ após uma seleção válida. Falhas no diretório e nas subdimensões podem ser
 recuperadas de forma independente.
 
 A pergunta diária não ocupa uma aba. Ela é aberta pelo agendador ou
-manualmente pelo menu da área de notificação. Não existe configuração de
+manualmente pelo menu da área de notificação. Clicar no ícone do tray apenas
+abre o menu; somente as ações de feedback e configurações abrem a janela
+regular. Não existe configuração de
 horário: um início interativo verifica imediatamente; uma inicialização oculta
 antes das 09:00 aguarda a manhã. **Agora não** usa atrasos crescentes, com
 jitter, persistidos localmente.

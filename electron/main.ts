@@ -18,13 +18,18 @@ import type {
   FeedbackDraft,
   SessionView
 } from "../src/contracts.js";
+import {
+  APPLICATION_ID,
+  LEGACY_USER_DATA_DIRECTORY,
+  PRODUCT_NAME
+} from "../src/product.js";
 import { DailyScheduler } from "./scheduler.js";
 import {
   ApiError,
-  SintoniaClient,
+  PulseApiClient,
   type AccessTokenBundle,
   validateFeedbackSelection
-} from "./sintonia.js";
+} from "./pulse-api.js";
 import {
   notificationFor,
   type NativeNotificationKind
@@ -32,10 +37,11 @@ import {
 import { DailyQuestionCoordinator } from "./daily-question-coordinator.js";
 import { shouldPromptAutomatically } from "./question-state.js";
 import { SessionStore } from "./session-store.js";
+import { createTrayMenuTemplate } from "./tray-menu.js";
 import { applyQuestionWindowMode } from "./window-mode.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const client = new SintoniaClient();
+const client = new PulseApiClient();
 let mainWindow: BrowserWindow | undefined;
 let tray: Tray | undefined;
 let quitting = false;
@@ -131,7 +137,7 @@ function showWindow(view: AppView = "feedback", required = false): void {
 function showNativeNotification(kind: NativeNotificationKind): void {
   if (!Notification.isSupported()) return;
   const policy = notificationFor(kind);
-  const notification = new Notification({ title: "PulseTray", body: policy.body });
+  const notification = new Notification({ title: PRODUCT_NAME, body: policy.body });
   notification.on("click", () => showWindow(policy.view, policy.required));
   notification.show();
 }
@@ -146,9 +152,21 @@ const launchedHidden = process.argv.includes("--hidden");
 const scheduler = new DailyScheduler((now) =>
   dailyQuestions.run(now, shouldPromptAutomatically(launchedHidden, now))
 );
+app.setPath("userData", path.join(app.getPath("appData"), LEGACY_USER_DATA_DIRECTORY));
 
-function iconPath(): string {
+function applicationIconPath(): string {
   return path.join(app.getAppPath(), "assets", "icon.png");
+}
+
+function trayIcon(): Electron.NativeImage {
+  if (process.platform === "darwin") {
+    const image = nativeImage.createFromPath(
+      path.join(app.getAppPath(), "assets", "trayTemplate.png")
+    );
+    image.setTemplateImage(true);
+    return image;
+  }
+  return nativeImage.createFromPath(applicationIconPath()).resize({ width: 20, height: 20 });
 }
 
 function createWindow(): BrowserWindow {
@@ -158,8 +176,8 @@ function createWindow(): BrowserWindow {
     minWidth: 440,
     minHeight: 620,
     show: false,
-    title: "PulseTray",
-    icon: iconPath(),
+    title: PRODUCT_NAME,
+    icon: applicationIconPath(),
     backgroundColor: "#f5f7f6",
     autoHideMenuBar: true,
     skipTaskbar: true,
@@ -196,25 +214,18 @@ function createWindow(): BrowserWindow {
 }
 
 function createTray(): Tray {
-  const image = nativeImage.createFromPath(iconPath()).resize({ width: 20, height: 20 });
-  const appTray = new Tray(image);
-  appTray.setToolTip("PulseTray");
-  appTray.setContextMenu(Menu.buildFromTemplate([
-    { label: "Questão diária", click: () => showWindow("question") },
-    { label: "Enviar feedback", click: () => showWindow("feedback") },
-    { label: "Feedbacks recebidos", click: () => showWindow("received") },
-    { type: "separator" },
-    { label: "Configurações", click: () => showWindow("settings") },
-    { type: "separator" },
-    {
-      label: "Encerrar PulseTray",
-      click: () => {
+  const appTray = new Tray(trayIcon());
+  appTray.setToolTip(PRODUCT_NAME);
+  appTray.setContextMenu(Menu.buildFromTemplate(createTrayMenuTemplate({
+    openDailyQuestion: () => showWindow("question"),
+    openFeedbackComposer: () => showWindow("feedback"),
+    openReceivedFeedback: () => showWindow("received"),
+    openSettings: () => showWindow("settings"),
+    quit: () => {
         quitting = true;
         app.quit();
       }
-    }
-  ]));
-  appTray.on("click", () => showWindow("feedback"));
+  })));
   return appTray;
 }
 
@@ -355,7 +366,7 @@ function registerIpc(): void {
     return {
       available: false,
       feedbacks: [],
-      message: "O serviço Sintonia ainda não expõe uma rota autorizada para feedbacks recebidos."
+      message: "O serviço iTransform ainda não expõe uma rota autorizada para feedbacks recebidos."
     };
   });
 }
@@ -371,7 +382,7 @@ if (!hasLock) {
     scheduler.stop();
   });
   void app.whenReady().then(async () => {
-    app.setAppUserModelId("com.codecompany.sintonia.pulsetray");
+    app.setAppUserModelId(APPLICATION_ID);
     if (!process.argv.includes("--test-mode")) {
       app.setLoginItemSettings({
         openAtLogin: true,

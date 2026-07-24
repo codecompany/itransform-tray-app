@@ -7,6 +7,6 @@ process.env.TS_NODE_TRANSPILE_ONLY = "true";
 register("tsx/esm", pathToFileURL(__filename));
 
 import("../electron/main.ts").catch((error) => {
-  console.error("Failed to load PulseTray main process", error);
+  console.error("Failed to load iTransform Pulse main process", error);
   process.exit(1);
 });

@@ -14,7 +14,7 @@ import {
 } from "./question-state.js";
 import { localDate } from "./scheduler.js";
 import type { SessionStore } from "./session-store.js";
-import { ApiError } from "./sintonia.js";
+import { ApiError } from "./pulse-api.js";
 
 interface DailyQuestionGateway extends AnswerSyncGateway {
   getQuestion(): Promise<DailyQuestion | null>;
@@ -101,7 +101,7 @@ export class DailyQuestionCoordinator {
     await this.store.setDaily(next, {
       kind: "system",
       title: "Resposta diária salva",
-      detail: "O PulseTray sincronizará a resposta automaticamente."
+      detail: "O iTransform Pulse sincronizará a resposta automaticamente."
     });
     this.question = {
       ...this.question,
@@ -119,7 +119,7 @@ export class DailyQuestionCoordinator {
     await this.store.setDaily(next, {
       kind: "system",
       title: "Pergunta diária adiada",
-      detail: "O PulseTray perguntará novamente mais tarde."
+      detail: "O iTransform Pulse perguntará novamente mais tarde."
     });
     this.callbacks.release();
   }

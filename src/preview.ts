@@ -8,7 +8,7 @@ const configured: SessionView = {
     companyId: "company-preview",
     userId: "user-preview",
     name: "Marina Costa",
-    email: "marina@sintonia.example",
+    email: "marina@itransform.example",
     position: "Product Designer",
     managerName: "Carlos Nunes",
     startDate: "2025-02-10T00:00:00Z"
@@ -69,8 +69,8 @@ export function installPreviewBridge(): void {
     },
     skipQuestion: async () => state,
     listEmployees: async () => [
-      { id: "employee-2", name: "Bruno Lima", email: "bruno@sintonia.example", position: "Engenheiro" },
-      { id: "employee-3", name: "Camila Rocha", email: "camila@sintonia.example", position: "Analista" }
+      { id: "employee-2", name: "Bruno Lima", email: "bruno@itransform.example", position: "Engenheiro" },
+      { id: "employee-3", name: "Camila Rocha", email: "camila@itransform.example", position: "Analista" }
     ],
     listFeedbackTaxonomy: async () => ({
       indexes: [
