@@ -41,8 +41,10 @@ npm run smoke:npm
 - `POST /v1/pulse/tray/session`
 - consultas autorizadas de colaboradores, índices e dimensões
 
-O token opaco recebido por e-mail é trocado no Pulse Service por tokens oficiais
-das audiências Employee, Knowledge e Pulse. A tela de recebidos continua
+O token opaco recebido por e-mail é trocado no Pulse Service pelo Employee ID
+revalidado e por tokens oficiais das audiências Employee, Knowledge e Pulse.
+O processo principal usa esse ID para carregar o perfil e não interpreta claims
+não contratados dos access tokens. A tela de recebidos continua
 apresentando indisponibilidade explícita enquanto não existir um contrato
 autorizado para esse histórico. Nenhuma rota alternativa, acesso a banco,
 datalake ou Manager Hub é utilizado.

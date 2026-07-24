@@ -32,6 +32,7 @@ interface IndexRecord {
 }
 
 export interface AccessTokenBundle {
+  employeeId: string;
   employeeToken: string;
   knowledgeToken: string;
   pulseToken: string;
@@ -46,24 +47,6 @@ export class ApiError extends Error {
   ) {
     super(message);
   }
-}
-
-function tokenClaims(token: string): Record<string, unknown> {
-  const payload = token.split(".")[1];
-  if (!payload) return {};
-  try {
-    return JSON.parse(Buffer.from(payload, "base64url").toString("utf8")) as Record<string, unknown>;
-  } catch {
-    return {};
-  }
-}
-
-function firstClaim(claims: Record<string, unknown>, keys: string[]): string {
-  for (const key of keys) {
-    const value = claims[key];
-    if (typeof value === "string" && value.trim()) return value.trim();
-  }
-  return "";
 }
 
 function employeeName(employee: EmployeeRecord): string {
@@ -126,21 +109,20 @@ export class SintoniaClient {
     return items;
   }
 
-  async link(token: string): Promise<EmployeeProfile> {
-    const claims = tokenClaims(token);
-    const email = firstClaim(claims, ["email", "userEmail", "email_address", "preferred_username", "upn"]);
-    const employeeId = firstClaim(claims, ["employeeId", "employee_id"]);
-    if (!email && !employeeId) {
+  async link(token: string, employeeId?: string): Promise<EmployeeProfile> {
+    const normalizedEmployeeId = employeeId?.trim() ?? "";
+    if (!normalizedEmployeeId) {
       throw new ApiError(
-        "O token não contém o e-mail ou Employee ID necessário para concluir a vinculação.",
+        "A sessão não contém o Employee ID necessário para concluir a vinculação.",
         400,
-        "TOKEN_IDENTITY_MISSING"
+        "SESSION_IDENTITY_MISSING"
       );
     }
 
-    const employee = email
-      ? await this.request<EmployeeRecord>(`/v1/employees/email/${encodeURIComponent(email)}`, token)
-      : await this.request<EmployeeRecord>(`/v1/employees/${encodeURIComponent(employeeId)}`, token);
+    const employee = await this.request<EmployeeRecord>(
+      `/v1/employees/${encodeURIComponent(normalizedEmployeeId)}`,
+      token
+    );
     let managerName: string | undefined;
     if (employee.managerId) {
       const manager = await this.request<EmployeeRecord>(
