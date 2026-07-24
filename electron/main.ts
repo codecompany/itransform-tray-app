@@ -18,12 +18,16 @@ import type {
   AppView,
   DailyQuestion,
   EmployeeProfile,
-  FeedbackDimension,
   FeedbackDraft,
   SessionView
 } from "../src/contracts.js";
 import { DailyScheduler, localDate } from "./scheduler.js";
-import { ApiError, SintoniaClient, type AccessTokenBundle } from "./sintonia.js";
+import {
+  ApiError,
+  SintoniaClient,
+  type AccessTokenBundle,
+  validateFeedbackSelection
+} from "./sintonia.js";
 import {
   notificationFor,
   type NativeNotificationKind
@@ -456,11 +460,11 @@ function registerIpc(): void {
     );
     return employees.filter((employee) => employee.id !== profile.id);
   });
-  ipcMain.handle("feedback:dimensions", async (event) => {
+  ipcMain.handle("feedback:taxonomy", async (event) => {
     trusted(event);
     const profile = requireProfile();
     return withAccessTokens((tokens) =>
-      client.listFeedbackDimensions(tokens.knowledgeToken, profile.companyId)
+      client.listFeedbackTaxonomy(tokens.knowledgeToken, profile.companyId)
     );
   });
   ipcMain.handle("feedback:send", async (event, raw: unknown) => {
@@ -469,6 +473,8 @@ function registerIpc(): void {
     const input = raw as Partial<FeedbackDraft>;
     const draft: FeedbackDraft = {
       toEmployeeId: stringValue(input.toEmployeeId, "Colaborador", 200),
+      indexId: stringValue(input.indexId, "Índice", 200),
+      dimensionId: stringValue(input.dimensionId, "Dimensão", 200),
       subDimensionId: stringValue(input.subDimensionId, "Subdimensão", 200),
       importance: Number(input.importance),
       message: stringValue(input.message, "Mensagem", 400)
@@ -481,20 +487,23 @@ function registerIpc(): void {
     feedbackInFlight = true;
     try {
       const tokens = await accessTokens();
-      const [employees, dimensions] = await Promise.all([
+      const [employees, taxonomy] = await Promise.all([
         client.listEmployees(tokens.employeeToken, profile.companyId),
-        client.listFeedbackDimensions(tokens.knowledgeToken, profile.companyId)
+        client.listFeedbackTaxonomy(tokens.knowledgeToken, profile.companyId)
       ]);
       const recipient = employees.find((employee) => employee.id === draft.toEmployeeId);
-      const dimension = dimensions.find((item) => item.id === draft.subDimensionId) as FeedbackDimension | undefined;
-      if (!recipient || !dimension) throw new Error("Colaborador ou subdimensão inválida.");
+      if (!recipient) {
+        throw new Error("O colaborador selecionado não está mais disponível. Atualize a lista.");
+      }
+      const selection = validateFeedbackSelection(draft, taxonomy);
       await withAccessTokens((freshTokens) =>
-        client.sendFeedback(freshTokens.pulseToken, profile, draft, dimension)
+        client.sendFeedback(freshTokens, profile, draft)
       );
       await store.addEvent(
         "feedback-sent",
         `Feedback enviado para ${recipient.name}`,
-        `${dimension.indexKey} · ${dimension.name} · importância ${draft.importance}`
+        `${selection.index.key} · ${selection.dimension.name} · ` +
+        `${selection.subDimension.name} · importância ${draft.importance}`
       );
       showNativeNotification("feedback-sent");
     } finally {

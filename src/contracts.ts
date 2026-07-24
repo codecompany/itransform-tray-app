@@ -67,8 +67,21 @@ export interface FeedbackDimension {
   parentId?: string;
 }
 
+export interface FeedbackIndex {
+  id: string;
+  key: "IPT" | "IAT" | string;
+  description: string;
+}
+
+export interface FeedbackTaxonomy {
+  indexes: FeedbackIndex[];
+  dimensions: FeedbackDimension[];
+}
+
 export interface FeedbackDraft {
   toEmployeeId: string;
+  indexId: string;
+  dimensionId: string;
   subDimensionId: string;
   importance: number;
   message: string;
@@ -97,7 +110,7 @@ export interface PulseTrayApi {
   getQuestion(): Promise<DailyQuestion | null>;
   submitAnswer(input: { questionId: string; value: string; date: string }): Promise<SessionView>;
   listEmployees(): Promise<EmployeeOption[]>;
-  listFeedbackDimensions(): Promise<FeedbackDimension[]>;
+  listFeedbackTaxonomy(): Promise<FeedbackTaxonomy>;
   sendFeedback(draft: FeedbackDraft): Promise<void>;
   listReceivedFeedback(): Promise<ReceivedFeedbackResult>;
   logout(): Promise<SessionView>;

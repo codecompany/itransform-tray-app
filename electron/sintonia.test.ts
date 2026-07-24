@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ApiError, SintoniaClient } from "./sintonia";
+import { ApiError, SintoniaClient, validateFeedbackSelection } from "./sintonia";
 
 function response(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -11,6 +11,40 @@ function response(body: unknown, status = 200): Response {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("SintoniaClient", () => {
+  it("validates the complete index, dimension and subdimension chain", () => {
+    const taxonomy = {
+      indexes: [{ id: "ipt", key: "IPT", description: "Potencial" }],
+      dimensions: [
+        { id: "dimension", indexId: "ipt", indexKey: "IPT", name: "Liderança" },
+        {
+          id: "sub",
+          indexId: "ipt",
+          indexKey: "IPT",
+          parentId: "dimension",
+          name: "Escuta"
+        }
+      ]
+    };
+    const draft = {
+      toEmployeeId: "employee-2",
+      indexId: "ipt",
+      dimensionId: "dimension",
+      subDimensionId: "sub",
+      importance: 4,
+      message: "Boa escuta."
+    };
+
+    expect(validateFeedbackSelection(draft, taxonomy)).toMatchObject({
+      index: { id: "ipt" },
+      dimension: { id: "dimension" },
+      subDimension: { id: "sub" }
+    });
+    expect(() => validateFeedbackSelection(
+      { ...draft, dimensionId: "other" },
+      taxonomy
+    )).toThrow("Seleção de índice, dimensão ou subdimensão inválida");
+  });
+
   it("requests and exchanges the durable PulseTray token without an Authorization header", async () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(response({ message: "E-mail aceito." }, 202))
@@ -177,25 +211,38 @@ describe("SintoniaClient", () => {
     expect(fetchMock.mock.calls[1][0]).toContain("cursor=42");
   });
 
-  it("builds feedback options only from IPT and IAT subdimensions", async () => {
+  it("builds the IPT and IAT feedback taxonomy with root dimensions and subdimensions", async () => {
     vi.stubGlobal("fetch", vi.fn()
       .mockResolvedValueOnce(response({
         dimensions: [
-          { id: "parent", indexId: "ipt", name: "Potencial" },
-          { id: "child-1", indexId: "ipt", parentId: "parent", name: "Aprendizado" },
-          { id: "child-2", indexId: "other", parentId: "parent", name: "Outro" }
+          { id: "dimension-ipt", indexId: "ipt", name: "Potencial" },
+          {
+            id: "sub-ipt",
+            indexId: "ipt",
+            parentId: "dimension-ipt",
+            name: "Aprendizado"
+          },
+          { id: "dimension-other", indexId: "other", name: "Outro" }
         ]
       }))
       .mockResolvedValueOnce(response({
         indexes: [
-          { id: "ipt", key: "IPT" },
+          { id: "ipt", key: " ipt ", description: "Potencial de transformação" },
           { id: "other", key: "OUTRO" }
         ]
       })));
-    const dimensions = await new SintoniaClient("https://example.test")
-      .listFeedbackDimensions("token", "company-1");
-    expect(dimensions).toEqual([
-      expect.objectContaining({ id: "child-1", indexKey: "IPT", name: "Aprendizado" })
+    const taxonomy = await new SintoniaClient("https://example.test")
+      .listFeedbackTaxonomy("token", "company-1");
+    expect(taxonomy.indexes).toEqual([
+      {
+        id: "ipt",
+        key: "IPT",
+        description: "Potencial de transformação"
+      }
+    ]);
+    expect(taxonomy.dimensions).toEqual([
+      expect.objectContaining({ id: "dimension-ipt", indexKey: "IPT", name: "Potencial" }),
+      expect.objectContaining({ id: "sub-ipt", indexKey: "IPT", name: "Aprendizado" })
     ]);
   });
 
@@ -215,15 +262,32 @@ describe("SintoniaClient", () => {
     const fetchMock = vi.fn().mockResolvedValue(response({ status: "created", id: "feedback-1" }, 201));
     vi.stubGlobal("fetch", fetchMock);
     await new SintoniaClient("https://example.test").sendFeedback(
-      "token",
+      {
+        employeeId: "from",
+        employeeToken: "employee-token",
+        knowledgeToken: "knowledge-token",
+        pulseToken: "pulse-token",
+        expiresAt: "2026-07-24T20:00:00Z"
+      },
       {
         id: "from", companyId: "company", userId: "user", name: "Ana",
         email: "ana@example.com", position: "Design", startDate: "2025-01-01"
       },
-      { toEmployeeId: "to", subDimensionId: "sub", importance: 5, message: "  Excelente trabalho.  " },
-      { id: "sub", indexId: "ipt", indexKey: "IPT", parentId: "dimension", name: "Aprendizado" }
+      {
+        toEmployeeId: "to",
+        indexId: "ipt",
+        dimensionId: "dimension",
+        subDimensionId: "sub",
+        importance: 5,
+        message: "  Excelente trabalho.  "
+      }
     );
     const body = JSON.parse(fetchMock.mock.calls[0][1].body);
+    expect(fetchMock.mock.calls[0][1].headers).toMatchObject({
+      Authorization: "Bearer pulse-token",
+      "X-PulseTray-Employee-Token": "employee-token",
+      "X-PulseTray-Knowledge-Token": "knowledge-token"
+    });
     expect(body).toMatchObject({
       company_id: "company",
       from_employee_id: "from",
@@ -235,5 +299,35 @@ describe("SintoniaClient", () => {
       text: "Excelente trabalho."
     });
     expect(body.submitted_at).toBeTruthy();
+  });
+
+  it("translates an invalid feedback target into an actionable message", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(
+      response({ error: "invalid feedback target" }, 500)
+    ));
+    const request = new SintoniaClient("https://example.test").sendFeedback(
+      {
+        employeeId: "from",
+        employeeToken: "employee-token",
+        knowledgeToken: "knowledge-token",
+        pulseToken: "pulse-token",
+        expiresAt: "2026-07-24T20:00:00Z"
+      },
+      {
+        id: "from", companyId: "company", userId: "user", name: "Ana",
+        email: "ana@example.com", position: "Design", startDate: "2025-01-01"
+      },
+      {
+        toEmployeeId: "to",
+        indexId: "ipt",
+        dimensionId: "dimension",
+        subDimensionId: "sub",
+        importance: 5,
+        message: "Excelente trabalho."
+      }
+    );
+    await expect(request).rejects.toThrow(
+      "O colaborador selecionado não pôde ser validado. Atualize a lista e tente novamente."
+    );
   });
 });

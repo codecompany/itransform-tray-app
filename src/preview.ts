@@ -75,10 +75,18 @@ export function installPreviewBridge(): void {
       { id: "employee-2", name: "Bruno Lima", email: "bruno@sintonia.example", position: "Engenheiro" },
       { id: "employee-3", name: "Camila Rocha", email: "camila@sintonia.example", position: "Analista" }
     ],
-    listFeedbackDimensions: async () => [
-      { id: "sub-1", indexId: "ipt", indexKey: "IPT", parentId: "dim-1", name: "Aprendizado" },
-      { id: "sub-2", indexId: "iat", indexKey: "IAT", parentId: "dim-2", name: "Confiança" }
-    ],
+    listFeedbackTaxonomy: async () => ({
+      indexes: [
+        { id: "ipt", key: "IPT", description: "Índice de Potencial de Transformação" },
+        { id: "iat", key: "IAT", description: "Índice de Ambiente de Trabalho" }
+      ],
+      dimensions: [
+        { id: "dim-1", indexId: "ipt", indexKey: "IPT", name: "Potencial" },
+        { id: "sub-1", indexId: "ipt", indexKey: "IPT", parentId: "dim-1", name: "Aprendizado" },
+        { id: "dim-2", indexId: "iat", indexKey: "IAT", name: "Confiança" },
+        { id: "sub-2", indexId: "iat", indexKey: "IAT", parentId: "dim-2", name: "Segurança psicológica" }
+      ]
+    }),
     sendFeedback: async () => undefined,
     listReceivedFeedback: async () => ({
       available: true,
