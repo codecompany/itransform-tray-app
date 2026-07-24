@@ -399,7 +399,7 @@ function registerIpc(): void {
     trusted(event);
     requireProfile();
     const cached = dailyQuestions.current();
-    await dailyQuestions.check(new Date(), false);
+    await dailyQuestions.checkNow(new Date());
     return dailyQuestions.current() ?? cached;
   });
   ipcMain.handle("question:answer", async (event, raw: unknown) => {
@@ -555,14 +555,14 @@ if (!hasLock) {
         getQuestion: () => {
           const profile = requireProfile();
           return withAccessTokens((tokens) =>
-            client.getQuestion(tokens.pulseToken, profile.id)
+            client.getQuestion(tokens, profile.id)
           );
         },
         submitAnswer: (answer) => {
           const profile = requireProfile();
           return withAccessTokens((tokens) =>
             client.submitAnswer(
-              tokens.pulseToken,
+              tokens,
               profile.id,
               answer.questionId,
               answer.value
