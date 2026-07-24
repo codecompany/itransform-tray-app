@@ -1,5 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ApiError, PulseApiClient } from "./pulse-api";
+import {
+  ApiError,
+  PulseApiClient,
+  type AccessTokenBundle
+} from "./pulse-api";
 
 function response(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -9,6 +13,14 @@ function response(body: unknown, status = 200): Response {
 }
 
 afterEach(() => vi.unstubAllGlobals());
+
+const accessTokens: AccessTokenBundle = {
+  employeeId: "employee-1",
+  employeeToken: "employee-token",
+  knowledgeToken: "knowledge-token",
+  pulseToken: "pulse-token",
+  expiresAt: "2026-07-24T20:00:00Z"
+};
 
 describe("PulseApiClient", () => {
   it("requests and exchanges the durable tray token without an Authorization header", async () => {
@@ -113,7 +125,7 @@ describe("PulseApiClient", () => {
 
   it("maps a missing scheduled question to null", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(response({ error: "not found" }, 404)));
-    await expect(new PulseApiClient("https://example.test").getQuestion("token", "employee-1"))
+    await expect(new PulseApiClient("https://example.test").getQuestion(accessTokens, "employee-1"))
       .resolves.toBeNull();
   });
 
@@ -183,7 +195,7 @@ describe("PulseApiClient", () => {
       question: { id: "question-1", text: "Pergunta?", choices: [] }
     })));
 
-    await expect(new PulseApiClient("https://example.test").getQuestion("token", "employee-1"))
+    await expect(new PulseApiClient("https://example.test").getQuestion(accessTokens, "employee-1"))
       .resolves.toMatchObject({ answered: true, answerStatus: "external" });
   });
 
@@ -194,17 +206,47 @@ describe("PulseApiClient", () => {
       question: { id: "question-1", text: "Pergunta?", choices: [] }
     })));
 
-    await expect(new PulseApiClient("https://example.test").getQuestion("token", "employee-1"))
+    await expect(new PulseApiClient("https://example.test").getQuestion(accessTokens, "employee-1"))
       .resolves.toMatchObject({ answered: false, answerStatus: "unanswered" });
   });
 
-  it("submits the exact Pulse answer contract", async () => {
+  it("delegates service tokens for the exact daily question contract", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(response({
+      employeeId: "employee-1",
+      date: "2026-07-24",
+      question: { id: "question-1", text: "Pergunta?", choices: [] }
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await new PulseApiClient("https://example.test").getQuestion(
+      accessTokens,
+      "employee-1"
+    );
+
+    expect(fetchMock.mock.calls[0][1].headers).toMatchObject({
+      Authorization: "Bearer pulse-token",
+      "X-PulseTray-Employee-Token": "employee-token",
+      "X-PulseTray-Knowledge-Token": "knowledge-token"
+    });
+  });
+
+  it("submits the exact Pulse answer contract with delegated tokens", async () => {
     const fetchMock = vi.fn().mockResolvedValue(response({ status: "answer submitted successfully" }));
     vi.stubGlobal("fetch", fetchMock);
-    await new PulseApiClient("https://example.test").submitAnswer("token", "employee-1", "question-1", "5");
+    await new PulseApiClient("https://example.test").submitAnswer(
+      accessTokens,
+      "employee-1",
+      "question-1",
+      "5"
+    );
     expect(fetchMock.mock.calls[0][0]).toBe("https://example.test/v1/pulse/answer/employee-1");
     expect(fetchMock.mock.calls[0][1]).toMatchObject({
       method: "POST",
+      headers: expect.objectContaining({
+        Authorization: "Bearer pulse-token",
+        "X-PulseTray-Employee-Token": "employee-token",
+        "X-PulseTray-Knowledge-Token": "knowledge-token"
+      }),
       body: JSON.stringify({ questionId: "question-1", value: "5" })
     });
   });

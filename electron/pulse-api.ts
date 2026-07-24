@@ -159,11 +159,20 @@ export class PulseApiClient {
     };
   }
 
-  async getQuestion(token: string, employeeId: string): Promise<DailyQuestion | null> {
+  async getQuestion(
+    tokens: AccessTokenBundle,
+    employeeId: string
+  ): Promise<DailyQuestion | null> {
     try {
       const question = await this.request<Omit<DailyQuestion, "answerStatus"> & { answered?: boolean }>(
         `/v1/pulse/question/${encodeURIComponent(employeeId)}`,
-        token
+        tokens.pulseToken,
+        {
+          headers: {
+            "X-PulseTray-Employee-Token": tokens.employeeToken,
+            "X-PulseTray-Knowledge-Token": tokens.knowledgeToken
+          }
+        }
       );
       const answered = question.answered === true;
       return {
@@ -177,11 +186,24 @@ export class PulseApiClient {
     }
   }
 
-  async submitAnswer(token: string, employeeId: string, questionId: string, value: string): Promise<void> {
-    await this.request<{ status: string }>(`/v1/pulse/answer/${encodeURIComponent(employeeId)}`, token, {
-      method: "POST",
-      body: JSON.stringify({ questionId, value })
-    });
+  async submitAnswer(
+    tokens: AccessTokenBundle,
+    employeeId: string,
+    questionId: string,
+    value: string
+  ): Promise<void> {
+    await this.request<{ status: string }>(
+      `/v1/pulse/answer/${encodeURIComponent(employeeId)}`,
+      tokens.pulseToken,
+      {
+        method: "POST",
+        headers: {
+          "X-PulseTray-Employee-Token": tokens.employeeToken,
+          "X-PulseTray-Knowledge-Token": tokens.knowledgeToken
+        },
+        body: JSON.stringify({ questionId, value })
+      }
+    );
   }
 
   async listEmployees(token: string, companyId: string): Promise<EmployeeOption[]> {

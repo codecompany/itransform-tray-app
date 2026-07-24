@@ -184,6 +184,20 @@ describe("daily question coordinator", () => {
     expect(coordinator.current()?.question.id).toBe("question-1");
   });
 
+  it("surfaces a manual load failure while retaining the background retry", async () => {
+    const { coordinator, gateway, store } = await setup(null);
+    gateway.getQuestion.mockRejectedValue(new ApiError("unavailable", 503));
+    const now = new Date(2026, 6, 24, 10, 0, 0);
+
+    await expect(coordinator.checkNow(now)).rejects.toEqual(
+      new ApiError("unavailable", 503)
+    );
+    expect(store.daily().checkFailures).toBe(1);
+
+    await expect(coordinator.check(now, false)).resolves.toBeUndefined();
+    expect(store.daily().checkFailures).toBe(2);
+  });
+
   it("does not overwrite a locally pending answer with a stale remote state", async () => {
     const { callbacks, coordinator, store } = await setup();
     const now = new Date(2026, 6, 24, 10, 0, 0);

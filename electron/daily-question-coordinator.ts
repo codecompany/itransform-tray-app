@@ -31,6 +31,8 @@ interface AnswerInput {
   date: string;
 }
 
+type QuestionFailureMode = "defer" | "surface";
+
 export class DailyQuestionCoordinator {
   private question: DailyQuestion | null;
   private taskInFlight = false;
@@ -73,6 +75,24 @@ export class DailyQuestionCoordinator {
     promptWhenAvailable = true,
     nextAllowedPromptAt?: Date
   ): Promise<void> {
+    await this.loadQuestion(
+      now,
+      promptWhenAvailable,
+      nextAllowedPromptAt,
+      "defer"
+    );
+  }
+
+  async checkNow(now = new Date()): Promise<void> {
+    await this.loadQuestion(now, false, undefined, "surface");
+  }
+
+  private async loadQuestion(
+    now: Date,
+    promptWhenAvailable: boolean,
+    nextAllowedPromptAt: Date | undefined,
+    failureMode: QuestionFailureMode
+  ): Promise<void> {
     if (!this.store.snapshot().profile) return;
     try {
       const remote = await this.gateway.getQuestion();
@@ -103,6 +123,7 @@ export class DailyQuestionCoordinator {
         event: "daily_question_check_failed",
         status: error instanceof ApiError ? error.status : undefined
       }));
+      if (failureMode === "surface" && !this.question) throw error;
     }
   }
 

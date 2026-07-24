@@ -24,8 +24,16 @@ Electron no pacote.
 - A sessão do Pulse Service fornece o Employee ID revalidado. O processo
   principal usa esse ID para carregar o perfil e não interpreta claims dos
   access tokens.
+- A questão diária usa o token de Pulse como credencial autorizadora. O
+  processo principal delega os tokens curtos de Employee e Knowledge nos
+  cabeçalhos `X-PulseTray-Employee-Token` e
+  `X-PulseTray-Knowledge-Token`; cada serviço valida sua própria audiência e
+  escopo, e nenhum token é exposto ao renderer.
 - Toda integração usa APIs oficiais. Contratos ausentes permanecem indisponíveis
   de forma explícita.
+- A consulta automática mantém o retry local durante falhas. A abertura manual
+  mostra a falha quando não existe pergunta em cache, em vez de apresentar uma
+  indisponibilidade como “Nada por enquanto”.
 - A pergunta diária não faz parte da navegação persistente. Quando o agendador
   encontra uma pergunta disponível, o processo principal abre uma janela em
   separado, sem barra de título, com tamanho fixo e sem redimensionamento. O
