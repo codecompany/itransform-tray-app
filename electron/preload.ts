@@ -17,6 +17,8 @@ const api: PulseTrayApi = {
   listEmployees: () => ipcRenderer.invoke("feedback:employees"),
   sendFeedback: (draft: FeedbackDraft, requestId: string) =>
     ipcRenderer.invoke("feedback:send", draft, requestId),
+  requestFeedback: (toEmployeeId: string, requestId: string) =>
+    ipcRenderer.invoke("feedback:request", toEmployeeId, requestId),
   listFeedbackHistory: (direction) => ipcRenderer.invoke("feedback:history", direction),
   saveQuietHours: (windows: QuietHoursWindow[]) =>
     ipcRenderer.invoke("settings:quiet-hours", windows),

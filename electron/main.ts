@@ -58,7 +58,9 @@ let quitting = false;
 let questionRequired = false;
 let answerInFlight = false;
 let feedbackInFlight = false;
+let feedbackRequestInFlight = false;
 const feedbackRequests = new IdempotentRequestRegistry<SessionView>();
+const feedbackRequestDeliveries = new IdempotentRequestRegistry<SessionView>();
 let leadershipRefresh: Promise<void> | undefined;
 let store: SessionStore;
 let dailyQuestions: DailyQuestionCoordinator;
@@ -169,7 +171,9 @@ function loadRenderer(window: BrowserWindow, surface: "panel" | "question"): voi
 function showPanelWindow(view: Exclude<AppView, "question"> = "feedbacks"): void {
   if (!panelWindow || panelWindow.isDestroyed()) return;
   const workArea = screen.getDisplayMatching(panelWindow.getBounds()).workAreaSize;
-  const preferred = view === "feedbacks" || view === "received-feedback"
+  const preferred = view === "feedbacks" ||
+    view === "request-feedback" ||
+    view === "received-feedback"
     ? { width: 760, height: 820 }
     : { width: 520, height: 720 };
   panelWindow.setSize(
@@ -343,6 +347,7 @@ function createTray(): Tray {
   appTray.setContextMenu(Menu.buildFromTemplate(createTrayMenuTemplate({
     openDailyQuestion: () => showQuestionWindow(false),
     openSendFeedback: () => showPanelWindow("feedbacks"),
+    openRequestFeedback: () => showPanelWindow("request-feedback"),
     openReceivedFeedback: () => showPanelWindow("received-feedback"),
     openSettings: () => showPanelWindow("settings"),
     quit: () => {
@@ -359,6 +364,7 @@ async function logout(): Promise<SessionView> {
   setQuestionRequired(false);
   questionWindow?.hide();
   feedbackRequests.clear();
+  feedbackRequestDeliveries.clear();
   receivedFeedbackMonitor.reset();
   await store.clear();
   return sessionView();
@@ -518,6 +524,38 @@ function registerIpc(): void {
         return sessionView();
       } finally {
         feedbackInFlight = false;
+      }
+    });
+  });
+  ipcMain.handle("feedback:request", (event, rawEmployeeId: unknown, rawRequestId: unknown) => {
+    trusted(event);
+    const toEmployeeId = stringValue(rawEmployeeId, "Colaborador", 100);
+    const requestId = stringValue(rawRequestId, "Identificador da solicitação", 100);
+    const profile = requireProfile();
+    if (toEmployeeId === profile.id) throw new Error("Selecione outro colaborador.");
+    return feedbackRequestDeliveries.run(requestId, async () => {
+      if (feedbackRequestInFlight) {
+        throw new Error("Sua solicitação já está sendo enviada.");
+      }
+      feedbackRequestInFlight = true;
+      try {
+        const tokens = await accessTokens();
+        const employees = await client.listEmployees(tokens.employeeToken, profile.companyId);
+        const recipient = employees.find((employee) => employee.id === toEmployeeId);
+        if (!recipient) {
+          throw new Error("O colaborador selecionado não está mais disponível. Atualize a lista.");
+        }
+        await withAccessTokens((freshTokens) =>
+          client.requestFeedback(freshTokens, profile, toEmployeeId, requestId)
+        );
+        await store.addEvent(
+          "system",
+          `Feedback solicitado a ${recipient.name}`,
+          "Solicitação enviada por e-mail."
+        );
+        return sessionView();
+      } finally {
+        feedbackRequestInFlight = false;
       }
     });
   });

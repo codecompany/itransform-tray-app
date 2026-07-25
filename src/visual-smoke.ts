@@ -34,6 +34,7 @@ async function fill(id: string, value: string): Promise<void> {
 }
 
 async function reachMethod(): Promise<void> {
+  await click("Iniciar");
   (await waitFor("#employee-search")).click();
   await wait();
   (await waitFor("#employee-option-employee-2")).click();
@@ -85,7 +86,11 @@ export async function prepareVisualJourney(journey: string): Promise<void> {
       break;
     case "received":
       await click("Recebidos");
-      await waitFor(".feedback-history");
+      await waitFor(".feedback-history-table");
+      break;
+    case "request":
+      await click("Solicitar");
+      await waitFor(".request-feedback-form");
       break;
     case "settings":
       document.querySelector<HTMLButtonElement>('button[aria-label="Ajustes"]')?.click();

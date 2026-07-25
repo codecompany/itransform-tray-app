@@ -37,6 +37,7 @@ function api(overrides: Partial<PulseTrayApi> = {}): PulseTrayApi {
     deferQuestion: vi.fn().mockResolvedValue(linkedSession),
     listEmployees: vi.fn().mockResolvedValue([]),
     sendFeedback: vi.fn().mockResolvedValue(linkedSession),
+    requestFeedback: vi.fn().mockResolvedValue(linkedSession),
     listFeedbackHistory: vi.fn().mockResolvedValue({ feedbacks: [] }),
     saveQuietHours: vi.fn().mockImplementation(async (quietHours) => ({
       ...linkedSession,
@@ -58,7 +59,12 @@ function api(overrides: Partial<PulseTrayApi> = {}): PulseTrayApi {
 }
 
 async function selectRecipient(name = "Bruno Lima"): Promise<void> {
-  await userEvent.click(await screen.findByLabelText("Nome ou e-mail do colaborador"));
+  let search = screen.queryByLabelText("Nome ou e-mail do colaborador");
+  if (!search) {
+    await userEvent.click(await screen.findByRole("button", { name: "Iniciar" }));
+    search = await screen.findByLabelText("Nome ou e-mail do colaborador");
+  }
+  await userEvent.click(search);
   await userEvent.click(await screen.findByRole("option", { name: new RegExp(name) }));
 }
 
@@ -175,7 +181,7 @@ describe("iTransform Pulse app", () => {
     await userEvent.type(input, "token-value");
     await userEvent.click(screen.getByRole("button", { name: "Vincular dispositivo" }));
     expect(bridge.link).toHaveBeenCalledWith("token-value");
-    expect(await screen.findByText("Enviar feedback para alguém")).toBeInTheDocument();
+    expect(await screen.findByText("O que você quer fazer?")).toBeInTheDocument();
   });
 
   it("keeps the token screen on validation failure and normalizes the IPC error", async () => {
@@ -202,7 +208,7 @@ describe("iTransform Pulse app", () => {
     const bridge = api();
     window.pulseTray = bridge;
     render(<App />);
-    expect(await screen.findByText("Enviar feedback para alguém")).toBeInTheDocument();
+    expect(await screen.findByText("O que você quer fazer?")).toBeInTheDocument();
     expect(bridge.getQuestion).not.toHaveBeenCalled();
     expect(screen.queryByRole("button", { name: "Questão" })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Feedbacks" })).toBeInTheDocument();
@@ -247,7 +253,7 @@ describe("iTransform Pulse app", () => {
       value: "5",
       date: "2026-07-23"
     });
-    expect(await screen.findByText("A pergunta de hoje já foi respondida.")).toBeInTheDocument();
+    expect(await screen.findByText("A questão de hoje já foi respondida.")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Enviar feedback" })).not.toBeInTheDocument();
   });
 
@@ -278,7 +284,7 @@ describe("iTransform Pulse app", () => {
     window.history.replaceState({}, "", "/?surface=question");
     window.pulseTray = api();
     render(<App />);
-    expect(await screen.findByText("Não há pergunta disponível para hoje.")).toBeInTheDocument();
+    expect(await screen.findByText("Não há uma questão para responder hoje.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Fechar questão diária" })).toBeInTheDocument();
   });
 
@@ -295,7 +301,7 @@ describe("iTransform Pulse app", () => {
     expect(screen.getByRole("button", { name: "Tentar novamente" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Lembrar mais tarde" })).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Tentar novamente" }));
-    expect(await screen.findByText("Não há pergunta disponível para hoje.")).toBeInTheDocument();
+    expect(await screen.findByText("Não há uma questão para responder hoje.")).toBeInTheDocument();
   });
 
   it("defers a failed required question for a later retry", async () => {
@@ -375,7 +381,7 @@ describe("iTransform Pulse app", () => {
     });
     window.pulseTray = bridge;
     render(<App />);
-    expect(await screen.findByText("A pergunta de hoje já foi respondida.")).toBeInTheDocument();
+    expect(await screen.findByText("A questão de hoje já foi respondida.")).toBeInTheDocument();
     expect(screen.queryByText("Obrigado por compartilhar seu pulso de hoje.")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Enviar feedback" })).not.toBeInTheDocument();
     expect(bridge.openFeedbacks).not.toHaveBeenCalled();
@@ -401,11 +407,49 @@ describe("iTransform Pulse app", () => {
     expect(confirm).toHaveBeenCalledWith(
       "Cancelar este feedback? O conteúdo preenchido será descartado."
     );
-    expect(await screen.findByText("Envio cancelado")).toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: "Começar novo feedback" }));
+    expect(await screen.findByText("O que você quer fazer?")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Iniciar" }));
     expect(await screen.findByLabelText("Nome ou e-mail do colaborador")).toHaveValue("");
     expect(screen.getByRole("progressbar")).toHaveAttribute("aria-valuenow", "1");
     expect(bridge.sendFeedback).not.toHaveBeenCalled();
+  });
+
+  it("requests feedback by email and returns to the feedback landing", async () => {
+    const bridge = api({
+      listEmployees: vi.fn().mockResolvedValue([
+        { id: "employee-2", name: "Bruno Lima", email: "bruno@example.com", position: "Engenheiro" }
+      ])
+    });
+    window.pulseTray = bridge;
+    render(<App />);
+
+    await userEvent.click(await screen.findByRole("button", { name: "Solicitar" }));
+    const search = await screen.findByLabelText("Nome ou e-mail do colaborador");
+    expect(search).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByRole("option", { name: /Bruno Lima/ })).not.toBeInTheDocument();
+    await userEvent.click(search);
+    await userEvent.click(await screen.findByRole("option", { name: /Bruno Lima/ }));
+    expect(bridge.requestFeedback).not.toHaveBeenCalled();
+    await userEvent.click(screen.getByRole("button", { name: "Solicitar" }));
+
+    expect(bridge.requestFeedback).toHaveBeenCalledWith("employee-2", expect.any(String));
+    expect(await screen.findByText("Solicitação enviada")).toBeInTheDocument();
+    expect(screen.getByText("Bruno Lima receberá um e-mail solicitando feedback."))
+      .toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Voltar ao início" }));
+    expect(await screen.findByText("O que você quer fazer?")).toBeInTheDocument();
+  });
+
+  it("cancels a feedback request without sending it", async () => {
+    const bridge = api();
+    window.pulseTray = bridge;
+    render(<App />);
+
+    await userEvent.click(await screen.findByRole("button", { name: "Solicitar" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Cancelar" }));
+
+    expect(await screen.findByText("O que você quer fazer?")).toBeInTheDocument();
+    expect(bridge.requestFeedback).not.toHaveBeenCalled();
   });
 
   it("asks for a recipient and feedback method without exposing internal taxonomy", async () => {
@@ -417,6 +461,7 @@ describe("iTransform Pulse app", () => {
     window.pulseTray = bridge;
     render(<App />);
 
+    await userEvent.click(await screen.findByRole("button", { name: "Iniciar" }));
     const search = await screen.findByLabelText("Nome ou e-mail do colaborador");
     expect(screen.queryByText("IPT")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Dimensão")).not.toBeInTheDocument();
@@ -512,6 +557,7 @@ describe("iTransform Pulse app", () => {
     window.pulseTray = api({ listEmployees });
     render(<App />);
 
+    await userEvent.click(await screen.findByRole("button", { name: "Iniciar" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("Diretório indisponível");
     await userEvent.click(screen.getByRole("button", { name: "Tentar carregar colaboradores novamente" }));
     await userEvent.click(await screen.findByLabelText("Nome ou e-mail do colaborador"));
@@ -605,8 +651,8 @@ describe("iTransform Pulse app", () => {
     expect(sendFeedback).toHaveBeenCalledOnce();
     resolveSend?.();
     expect(await screen.findByText("Seu feedback foi enviado com sucesso!")).toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: "Enviar outro feedback" }));
-    expect(await screen.findByLabelText("Nome ou e-mail do colaborador")).toHaveValue("");
+    await userEvent.click(screen.getByRole("button", { name: "Voltar ao início" }));
+    expect(await screen.findByText("O que você quer fazer?")).toBeInTheDocument();
   });
 
   it("reuses the same request identifier when feedback confirmation is retried", async () => {
@@ -643,6 +689,7 @@ describe("iTransform Pulse app", () => {
     });
     render(<App />);
 
+    await userEvent.click(await screen.findByRole("button", { name: "Iniciar" }));
     const search = await screen.findByRole("combobox", {
       name: "Nome ou e-mail do colaborador"
     });
@@ -663,14 +710,14 @@ describe("iTransform Pulse app", () => {
       "Rascunho preservado"
     );
 
-    const newTab = screen.getByRole("tab", { name: "Novo feedback" });
+    const newTab = screen.getByRole("tab", { name: "Feedback" });
     newTab.focus();
     await userEvent.keyboard("{ArrowRight}");
     expect(screen.getByRole("tab", { name: "Enviados" })).toHaveAttribute(
       "aria-selected",
       "true"
     );
-    await userEvent.click(screen.getByRole("tab", { name: "Novo feedback" }));
+    await userEvent.click(screen.getByRole("tab", { name: "Feedback" }));
     expect(screen.getByRole("textbox", { name: "Contexto ou fato observado *" }))
       .toHaveValue("Rascunho preservado");
   });
@@ -749,15 +796,23 @@ describe("iTransform Pulse app", () => {
     }));
     window.pulseTray = api({ listFeedbackHistory });
     render(<App />);
-    expect(await screen.findByRole("tab", { name: "Novo feedback" })).toHaveAttribute(
+    expect(await screen.findByRole("tab", { name: "Feedback" })).toHaveAttribute(
       "aria-selected",
       "true"
     );
     expect(screen.queryByText("Enviados recentemente")).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole("tab", { name: "Enviados" }));
     expect(await screen.findByText("Bruno Lima")).toBeInTheDocument();
-    expect(screen.getByText("Organizou as decisões")).toBeInTheDocument();
-    expect(screen.getByText("Antecipar os riscos")).toBeInTheDocument();
+    expect(screen.getByRole("table")).toBeInTheDocument();
+    const brunoRow = screen.getByText("Bruno Lima").closest("tr")!;
+    expect(within(brunoRow).getByText("Durante o planejamento")).toBeInTheDocument();
+    await userEvent.click(within(brunoRow).getByRole("button", { name: /Ver feedback/ }));
+    expect(await screen.findByText("Organizou as decisões")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Fechar detalhes" }));
+    const diegoRow = screen.getByText("Diego Melo").closest("tr")!;
+    await userEvent.click(within(diegoRow).getByRole("button", { name: /Ver feedback/ }));
+    expect(await screen.findByText("Antecipar os riscos")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Fechar detalhes" }));
     expect(screen.getByText("Mensagem anterior")).toBeInTheDocument();
     await userEvent.click(screen.getByRole("tab", { name: "Recebidos" }));
     expect(await screen.findByText("Camila Rocha")).toBeInTheDocument();
@@ -789,14 +844,14 @@ describe("iTransform Pulse app", () => {
       })
     });
     render(<App />);
-    await screen.findByText("Enviar feedback para alguém");
+    await screen.findByText("O que você quer fazer?");
 
     navigate?.("received-feedback", false);
 
-    expect(await screen.findByRole("tab", { name: "Recebidos" })).toHaveAttribute(
+    await waitFor(() => expect(screen.getByRole("tab", { name: "Recebidos" })).toHaveAttribute(
       "aria-selected",
       "true"
-    );
+    ));
     expect(await screen.findByText("Nenhum feedback recebido")).toBeInTheDocument();
   });
 
@@ -864,7 +919,7 @@ describe("iTransform Pulse app", () => {
     render(<App />);
     expect(await screen.findByRole("alert")).toHaveTextContent("Falha ao abrir");
     await userEvent.click(screen.getByRole("button", { name: "Tentar novamente" }));
-    expect(await screen.findByText("Enviar feedback para alguém")).toBeInTheDocument();
+    expect(await screen.findByText("O que você quer fazer?")).toBeInTheDocument();
   });
 
   it("logs out from settings", async () => {

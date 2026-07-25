@@ -1,12 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import logo from "./assets/logo-iTransform.png";
 import { withTimeout } from "./async";
-import FeedbackView from "./FeedbackView";
+import FeedbackHub from "./FeedbackHub";
 import type {
   AppView,
   DailyQuestion,
-  FeedbackHistoryItem,
-  FeedbackHistoryResult,
   SessionView
 } from "./contracts";
 
@@ -310,8 +308,10 @@ function QuestionView({
   if (!question) {
     return (
       <Page title="Questão diária">
-        <div className="empty">
-          <p ref={resultRef} tabIndex={-1}>Não há pergunta disponível para hoje.</p>
+        <div className="empty question-empty">
+          <span aria-hidden="true">✓</span>
+          <h2 ref={resultRef} tabIndex={-1}>Nenhuma questão disponível</h2>
+          <p>Não há uma questão para responder hoje.</p>
         </div>
       </Page>
     );
@@ -319,8 +319,10 @@ function QuestionView({
   if (question.answered) {
     return (
       <Page title="Questão diária">
-        <div className="empty">
-          <p ref={resultRef} tabIndex={-1}>A pergunta de hoje já foi respondida.</p>
+        <div className="empty question-empty">
+          <span aria-hidden="true">✓</span>
+          <h2 ref={resultRef} tabIndex={-1}>Questão concluída</h2>
+          <p>A questão de hoje já foi respondida.</p>
         </div>
       </Page>
     );
@@ -360,189 +362,6 @@ function QuestionView({
           </button>
         </div>
         {required && <small>Se pular, o iTransform Pulse perguntará novamente mais tarde.</small>}
-      </div>
-    </Page>
-  );
-}
-
-function historySections(feedback: FeedbackHistoryItem): Array<[string, string]> {
-  const content = feedback.content;
-  if (feedback.method === "situational") {
-    return [
-      ["Contexto", content.context],
-      ["Comportamento", content.observedBehavior],
-      ["Impacto", content.perceivedImpact],
-      ["Próximo passo", content.suggestedNextStep]
-    ].filter((entry): entry is [string, string] => Boolean(entry[1]));
-  }
-  if (feedback.method === "development") {
-    return [
-      ["Contexto", content.context],
-      ["Continuar", content.continueDoing],
-      ["Começar", content.startDoing],
-      ["Parar", content.stopDoing]
-    ].filter((entry): entry is [string, string] => Boolean(entry[1]));
-  }
-  return [["Feedback", feedback.message]];
-}
-
-function HistoryView({ direction }: { direction: "sent" | "received" }): JSX.Element {
-  const [result, setResult] = useState<FeedbackHistoryResult>();
-  const [error, setError] = useState("");
-
-  async function load(): Promise<void> {
-    setResult(undefined);
-    setError("");
-    try {
-      setResult(await withTimeout(
-        window.pulseTray.listFeedbackHistory(direction),
-        "O histórico demorou para responder. Tente novamente."
-      ));
-    } catch (reason) {
-      setError(messageOf(reason));
-    }
-  }
-
-  useEffect(() => {
-    void load();
-  }, [direction]);
-
-  if (!result && !error) return <PanelLoading label="Buscando feedbacks…" />;
-  return (
-    <section
-      className="feedback-pane feedback-history"
-      aria-label={direction === "sent" ? "Feedbacks enviados" : "Feedbacks recebidos"}
-    >
-      {error && (
-        <div className="field-recovery">
-          <ErrorNotice message={error} />
-          <button type="button" className="secondary" onClick={() => void load()}>
-            Tentar novamente
-          </button>
-        </div>
-      )}
-      {result?.feedbacks.length === 0 && (
-        <Empty
-          icon={direction === "sent" ? "↗" : "↙"}
-          title={direction === "sent" ? "Nenhum feedback enviado" : "Nenhum feedback recebido"}
-          text={direction === "sent"
-            ? "Os feedbacks que você enviar aparecerão aqui."
-            : "Os feedbacks que você receber aparecerão aqui."}
-        />
-      )}
-      {result?.feedbacks.map((feedback) => (
-        <article className="history-card" key={feedback.id}>
-          <div>
-            <strong>{feedback.person}</strong>
-            <time dateTime={feedback.date}>{dateLabel(feedback.date)}</time>
-          </div>
-          <span>
-            {feedback.method === "situational"
-              ? "Feedback situacional"
-              : feedback.method === "development"
-                ? "Feedback de desenvolvimento"
-                : "Feedback"} · importância {feedback.importance}
-          </span>
-          <dl>
-            {historySections(feedback).map(([label, value]) => (
-              <div key={label}>
-                <dt>{label}</dt>
-                <dd>{value}</dd>
-              </div>
-            ))}
-          </dl>
-        </article>
-      ))}
-    </section>
-  );
-}
-
-function FeedbacksView({
-  onChange,
-  requestedTab
-}: {
-  onChange: (session: SessionView) => void;
-  requestedTab: "new" | "received";
-}): JSX.Element {
-  type FeedbackTab = "new" | "sent" | "received";
-  const tabs: FeedbackTab[] = ["new", "sent", "received"];
-  const [tab, setTab] = useState<FeedbackTab>(requestedTab);
-  const tabListRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => setTab(requestedTab), [requestedTab]);
-
-  function moveTab(event: React.KeyboardEvent<HTMLButtonElement>, current: FeedbackTab): void {
-    const forward = event.key === "ArrowRight" || event.key === "ArrowDown";
-    const backward = event.key === "ArrowLeft" || event.key === "ArrowUp";
-    if (!forward && !backward && event.key !== "Home" && event.key !== "End") return;
-    event.preventDefault();
-    const currentIndex = tabs.indexOf(current);
-    const nextIndex = event.key === "Home"
-      ? 0
-      : event.key === "End"
-        ? tabs.length - 1
-        : (currentIndex + (forward ? 1 : -1) + tabs.length) % tabs.length;
-    const next = tabs[nextIndex];
-    setTab(next);
-    requestAnimationFrame(() => {
-      tabListRef.current?.querySelector<HTMLElement>(`#feedback-tab-${next}`)?.focus();
-    });
-  }
-
-  const labels: Record<FeedbackTab, string> = {
-    new: "Novo feedback",
-    sent: "Enviados",
-    received: "Recebidos"
-  };
-
-  return (
-    <Page title="Feedbacks">
-      <div
-        className="tabs feedback-tabs"
-        role="tablist"
-        aria-label="Criar e consultar feedbacks"
-        ref={tabListRef}
-      >
-        {tabs.map((item) => (
-          <button
-            type="button"
-            role="tab"
-            id={`feedback-tab-${item}`}
-            aria-controls={`feedback-panel-${item}`}
-            aria-selected={tab === item}
-            tabIndex={tab === item ? 0 : -1}
-            className={tab === item ? "active" : ""}
-            onKeyDown={(event) => moveTab(event, item)}
-            onClick={() => setTab(item)}
-            key={item}
-          >
-            {labels[item]}
-          </button>
-        ))}
-      </div>
-      <div
-        id="feedback-panel-new"
-        role="tabpanel"
-        aria-labelledby="feedback-tab-new"
-        hidden={tab !== "new"}
-      >
-        <FeedbackView embedded onSent={onChange} />
-      </div>
-      <div
-        id="feedback-panel-sent"
-        role="tabpanel"
-        aria-labelledby="feedback-tab-sent"
-        hidden={tab !== "sent"}
-      >
-        {tab === "sent" && <HistoryView direction="sent" />}
-      </div>
-      <div
-        id="feedback-panel-received"
-        role="tabpanel"
-        aria-labelledby="feedback-tab-received"
-        hidden={tab !== "received"}
-      >
-        {tab === "received" && <HistoryView direction="received" />}
       </div>
     </Page>
   );
@@ -715,10 +534,6 @@ function PanelLoading({ label }: { label: string }): JSX.Element {
   );
 }
 
-function Empty({ icon, title, text }: { icon: string; title: string; text: string }): JSX.Element {
-  return <div className="empty"><span>{icon}</span><h2>{title}</h2><p>{text}</p></div>;
-}
-
 function FeedbackIcon(): JSX.Element {
   return (
     <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -837,8 +652,20 @@ export default function App(): JSX.Element {
         <img src={logo} alt="iTransform" />
         <nav aria-label="Navegação principal">
           <button
-            className={view === "feedbacks" || view === "received-feedback" ? "active" : ""}
-            aria-current={view === "feedbacks" || view === "received-feedback" ? "page" : undefined}
+            className={
+              view === "feedbacks" ||
+              view === "request-feedback" ||
+              view === "received-feedback"
+                ? "active"
+                : ""
+            }
+            aria-current={
+              view === "feedbacks" ||
+              view === "request-feedback" ||
+              view === "received-feedback"
+                ? "page"
+                : undefined
+            }
             onClick={() => setView("feedbacks")}
             title="Feedbacks"
             aria-label="Feedbacks"
@@ -889,10 +716,18 @@ export default function App(): JSX.Element {
             </button>
           </div>
         )}
-        <div hidden={view !== "feedbacks" && view !== "received-feedback"}>
-          <FeedbacksView
+        <div
+          hidden={
+            view !== "feedbacks" &&
+            view !== "request-feedback" &&
+            view !== "received-feedback"
+          }
+        >
+          <FeedbackHub
+            key={`${navigationKey}-${view}`}
             onChange={setSession}
-            requestedTab={view === "received-feedback" ? "received" : "new"}
+            requestedTab={view === "received-feedback" ? "received" : "home"}
+            requestedAction={view === "request-feedback" ? "request" : undefined}
           />
         </div>
         <div hidden={view !== "settings"}>
