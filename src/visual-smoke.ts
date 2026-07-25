@@ -34,6 +34,8 @@ async function fill(id: string, value: string): Promise<void> {
 }
 
 async function reachMethod(): Promise<void> {
+  (await waitFor("#employee-search")).click();
+  await wait();
   (await waitFor("#employee-option-employee-2")).click();
   await wait();
   await click("Próximo");
@@ -78,7 +80,7 @@ export async function prepareVisualJourney(journey: string): Promise<void> {
       break;
     case "success":
       await reachReview();
-      await click("Concluir envio");
+      await click("Concluir");
       await waitFor(".success-card");
       break;
     case "received":

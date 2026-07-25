@@ -312,7 +312,7 @@ export default function FeedbackView({
     setRequestId(crypto.randomUUID());
     setQuery("");
     setSubmitError("");
-    setSearchOpen(true);
+    setSearchOpen(false);
   }
 
   function chooseMethod(method: FeedbackMethod): void {
@@ -510,6 +510,7 @@ export default function FeedbackView({
                     setQuery(event.target.value);
                     setSearchOpen(true);
                   }}
+                  onClick={() => setSearchOpen(true)}
                   onKeyDown={handleEmployeeKeyDown}
                   onFocus={() => setSearchOpen(true)}
                   placeholder="Digite um nome ou e-mail existente"
@@ -522,7 +523,6 @@ export default function FeedbackView({
                       ? `employee-option-${filtered[activeEmployeeIndex].id}`
                       : undefined
                   }
-                  autoFocus
                 />
                 {directoryLoading && (
                   <small className="field-status" role="status">Carregando colaboradores…</small>
@@ -817,7 +817,7 @@ export default function FeedbackView({
               disabled={busy || !canSubmit}
               onClick={() => void submit()}
             >
-              {busy ? "Enviando…" : confirmationPending ? "Verificar envio" : "Concluir envio"}
+              {busy ? "Enviando…" : confirmationPending ? "Verificar" : "Concluir"}
             </button>
           ) : (
             <button type="button" className="primary" onClick={goNext} disabled={!canAdvance || busy}>

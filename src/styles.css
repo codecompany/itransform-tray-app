@@ -838,21 +838,26 @@ textarea:focus {
 
 .wizard-actions {
   display: grid;
-  grid-template-columns: minmax(200px, 1fr) minmax(150px, 0.8fr);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 10px;
   border-top: 1px solid var(--line);
   padding-top: 10px;
 }
 
 .wizard-actions .primary,
-.wizard-actions .secondary {
+.wizard-actions .secondary,
+.wizard-actions .text-button {
   width: 100%;
 }
 
+.wizard-actions .text-button {
+  margin: 0;
+  padding-inline: 18px;
+  font-size: 0.85rem;
+}
+
 .wizard-secondary-actions {
-  display: grid;
-  grid-template-columns: minmax(80px, 0.8fr) minmax(100px, 1fr);
-  gap: 8px;
+  display: contents;
 }
 
 .selected-recipient-wizard {
@@ -1625,14 +1630,6 @@ textarea:focus {
 
   .review-content {
     grid-template-columns: 1fr;
-  }
-
-  .wizard-actions {
-    grid-template-columns: 1fr;
-  }
-
-  .wizard-secondary-actions {
-    grid-template-columns: 1fr 1fr;
   }
 
   .field-pair,
