@@ -1,4 +1,4 @@
-import { render, waitFor } from "@testing-library/react";
+import { fireEvent, render, waitFor } from "@testing-library/react";
 import axe from "axe-core";
 import { describe, expect, it, vi } from "vitest";
 import App from "./App";
@@ -34,6 +34,7 @@ function bridge(): PulseTrayApi {
       { id: "employee-2", name: "Bruno Lima", email: "bruno@example.com", position: "Engenheiro" }
     ]),
     sendFeedback: vi.fn(),
+    requestFeedback: vi.fn(),
     listFeedbackHistory: vi.fn().mockResolvedValue({ feedbacks: [] }),
     saveQuietHours: vi.fn(),
     openManagerHub: vi.fn(),
@@ -49,6 +50,8 @@ describe("accessibility smoke", () => {
     window.history.replaceState({}, "", "/");
     window.pulseTray = bridge();
     render(<App />);
+    await waitFor(() => expect(document.querySelector(".feedback-landing")).toBeTruthy());
+    fireEvent.click(document.querySelector<HTMLButtonElement>(".feedback-actions .primary")!);
     await waitFor(() => expect(document.querySelector(".feedback-form")).toBeTruthy());
 
     const result = await axe.run(document.body, {

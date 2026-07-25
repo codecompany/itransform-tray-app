@@ -57,23 +57,25 @@ export function installPreviewBridge(): void {
       state = configured;
       return state;
     },
-    getQuestion: async () => ({
-      employeeId: "employee-preview",
-      date: new Date().toISOString().slice(0, 10),
-      answered: false,
-      answerStatus: "unanswered",
-      question: {
-        id: "question-preview",
-        text: "Sinto que tenho espaço para aprender e testar novas ideias no meu trabalho?",
-        choices: [
-          { value: "1", label: "Discordo totalmente" },
-          { value: "2", label: "Discordo parcialmente" },
-          { value: "3", label: "Nem concordo, nem discordo" },
-          { value: "4", label: "Concordo parcialmente" },
-          { value: "5", label: "Concordo totalmente" }
-        ]
-      }
-    }),
+    getQuestion: async () => preview === "question-empty"
+      ? null
+      : ({
+          employeeId: "employee-preview",
+          date: new Date().toISOString().slice(0, 10),
+          answered: false,
+          answerStatus: "unanswered",
+          question: {
+            id: "question-preview",
+            text: "Sinto que tenho espaço para aprender e testar novas ideias no meu trabalho?",
+            choices: [
+              { value: "1", label: "Discordo totalmente" },
+              { value: "2", label: "Discordo parcialmente" },
+              { value: "3", label: "Nem concordo, nem discordo" },
+              { value: "4", label: "Concordo parcialmente" },
+              { value: "5", label: "Concordo totalmente" }
+            ]
+          }
+        }),
     submitAnswer: async () => {
       state = { ...state, lastAnswerDate: new Date().toISOString().slice(0, 10) };
       return state;
@@ -85,6 +87,7 @@ export function installPreviewBridge(): void {
       { id: "employee-3", name: "Camila Rocha", email: "camila@itransform.example", position: "Analista" }
     ],
     sendFeedback: async () => configured,
+    requestFeedback: async () => configured,
     listFeedbackHistory: async (direction) => ({
       feedbacks: [{
         id: "feedback-1",

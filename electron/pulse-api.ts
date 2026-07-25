@@ -79,9 +79,13 @@ export class PulseApiClient {
       }
     });
     if (!response.ok) {
-      const body = await response.json().catch(() => ({})) as { error?: string; code?: string };
+      const body = await response.json().catch(() => ({})) as {
+        error?: string;
+        detail?: string;
+        code?: string;
+      };
       throw new ApiError(
-        body.error || `A API iTransform Pulse respondeu ${response.status}.`,
+        body.detail || body.error || `A API iTransform Pulse respondeu ${response.status}.`,
         response.status,
         body.code
       );
@@ -302,6 +306,29 @@ export class PulseApiClient {
       }
       throw error;
     }
+  }
+
+  async requestFeedback(
+    tokens: AccessTokenBundle,
+    profile: EmployeeProfile,
+    toEmployeeId: string,
+    requestId: string
+  ): Promise<void> {
+    await this.request<{ status: string }>(
+      "/v1/pulse/feedback-requests",
+      tokens.pulseToken,
+      {
+        method: "POST",
+        headers: {
+          "X-PulseTray-Employee-Token": tokens.employeeToken,
+          "Idempotency-Key": requestId
+        },
+        body: JSON.stringify({
+          from_employee_id: profile.id,
+          to_employee_id: toEmployeeId
+        })
+      }
+    );
   }
 
   async listFeedbackHistory(

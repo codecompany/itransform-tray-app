@@ -194,10 +194,12 @@ function moveRadio(
 
 export default function FeedbackView({
   embedded = false,
-  onSent
+  onSent,
+  onCancel
 }: {
   embedded?: boolean;
   onSent?: (session: SessionView) => void;
+  onCancel?: () => void;
 }): JSX.Element {
   const [employees, setEmployees] = useState<EmployeeOption[]>([]);
   const [query, setQuery] = useState("");
@@ -210,7 +212,6 @@ export default function FeedbackView({
   const [activeEmployeeIndex, setActiveEmployeeIndex] = useState(-1);
   const [busy, setBusy] = useState(false);
   const [sent, setSent] = useState(false);
-  const [cancelled, setCancelled] = useState(false);
   const [stepIndex, setStepIndex] = useState(0);
   const [requestId, setRequestId] = useState(() => crypto.randomUUID());
   const headingRef = useRef<HTMLHeadingElement>(null);
@@ -236,7 +237,7 @@ export default function FeedbackView({
 
   useEffect(() => {
     headingRef.current?.focus();
-  }, [stepIndex, sent, cancelled]);
+  }, [stepIndex, sent]);
 
   const filtered = useMemo(() => {
     const normalized = query.trim().toLocaleLowerCase("pt-BR");
@@ -382,7 +383,7 @@ export default function FeedbackView({
       return;
     }
     reset();
-    setCancelled(true);
+    onCancel?.();
   }
 
   function goToStep(step: WizardStep): void {
@@ -441,23 +442,10 @@ export default function FeedbackView({
             onClick={() => {
               reset();
               setSent(false);
+              onCancel?.();
             }}
           >
-            Enviar outro feedback
-          </button>
-        </div>
-      </section>
-    );
-  }
-
-  if (cancelled) {
-    return (
-      <section className={embedded ? "feedback-pane" : "page"} aria-live="polite">
-        <div className="empty cancelled-card">
-          <h2 ref={headingRef} tabIndex={-1}>Envio cancelado</h2>
-          <p>O conteúdo deste feedback foi descartado.</p>
-          <button className="primary" onClick={() => setCancelled(false)}>
-            Começar novo feedback
+            {onCancel ? "Voltar ao início" : "Enviar outro feedback"}
           </button>
         </div>
       </section>

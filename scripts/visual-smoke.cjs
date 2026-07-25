@@ -166,9 +166,18 @@ async function capture(
     results.push(await capture("wizard-guidance-760x820", 760, 820, "panel", "guidance"));
     results.push(await capture("wizard-review-760x820", 760, 820, "panel", "review"));
     results.push(await capture("wizard-success-760x820", 760, 820, "panel", "success"));
+    results.push(await capture("request-760x820", 760, 820, "panel", "request"));
     results.push(await capture("received-760x820", 760, 820, "panel", "received"));
     results.push(await capture("settings-520x720", 520, 720, "panel", "settings"));
     results.push(await capture("question-660x720", 660, 720, "question"));
+    results.push(await capture(
+      "question-empty-660x720",
+      660,
+      720,
+      "question",
+      "",
+      "question-empty"
+    ));
     process.stdout.write(`${JSON.stringify({ output, results }, null, 2)}\n`);
     server.closeAllConnections();
     await new Promise((resolve) => server.close(resolve));

@@ -5,6 +5,7 @@ function actions(): TrayMenuActions {
   return {
     openDailyQuestion: vi.fn(),
     openSendFeedback: vi.fn(),
+    openRequestFeedback: vi.fn(),
     openReceivedFeedback: vi.fn(),
     openSettings: vi.fn(),
     quit: vi.fn()
@@ -27,6 +28,10 @@ describe("tray menu", () => {
       expect.objectContaining({
         label: "Enviar feedback",
         click: callbacks.openSendFeedback
+      }),
+      expect.objectContaining({
+        label: "Solicitar feedback",
+        click: callbacks.openRequestFeedback
       }),
       expect.objectContaining({
         label: "Feedbacks recebidos",

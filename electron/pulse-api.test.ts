@@ -368,6 +368,43 @@ describe("PulseApiClient", () => {
     });
   });
 
+  it("sends an idempotent feedback request with authenticated employee context", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(response({ status: "sent" }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await new PulseApiClient("https://example.test").requestFeedback(
+      {
+        employeeId: "from",
+        employeeToken: "employee-token",
+        knowledgeToken: "knowledge-token",
+        pulseToken: "pulse-token",
+        expiresAt: "2026-07-24T20:00:00Z"
+      },
+      {
+        id: "from", companyId: "company", userId: "user", name: "Ana",
+        email: "ana@example.com", position: "Design", startDate: "2025-01-01"
+      },
+      "to",
+      "request-1"
+    );
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://example.test/v1/pulse/feedback-requests",
+      expect.objectContaining({
+        method: "POST",
+        headers: expect.objectContaining({
+          Authorization: "Bearer pulse-token",
+          "X-PulseTray-Employee-Token": "employee-token",
+          "Idempotency-Key": "request-1"
+        }),
+        body: JSON.stringify({
+          from_employee_id: "from",
+          to_employee_id: "to"
+        })
+      })
+    );
+  });
+
   it("maps sent and received structured feedback history", async () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(response({
