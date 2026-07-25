@@ -262,7 +262,8 @@ export class PulseApiClient {
   async sendFeedback(
     tokens: AccessTokenBundle,
     profile: EmployeeProfile,
-    draft: FeedbackDraft
+    draft: FeedbackDraft,
+    requestId: string
   ): Promise<void> {
     try {
       await this.request<{ status: string; id: string }>(
@@ -272,7 +273,8 @@ export class PulseApiClient {
           method: "POST",
           headers: {
             "X-PulseTray-Employee-Token": tokens.employeeToken,
-            "X-PulseTray-Knowledge-Token": tokens.knowledgeToken
+            "X-PulseTray-Knowledge-Token": tokens.knowledgeToken,
+            "Idempotency-Key": requestId
           },
           body: JSON.stringify({
             company_id: profile.companyId,

@@ -79,6 +79,7 @@ export function installPreviewBridge(): void {
       return state;
     },
     skipQuestion: async () => state,
+    deferQuestion: async () => state,
     listEmployees: async () => [
       { id: "employee-2", name: "Bruno Lima", email: "bruno@itransform.example", position: "Engenheiro" },
       { id: "employee-3", name: "Camila Rocha", email: "camila@itransform.example", position: "Analista" }

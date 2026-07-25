@@ -1,6 +1,7 @@
 export type AppView =
   | "question"
   | "feedbacks"
+  | "received-feedback"
   | "settings";
 
 export type EventKind = "system" | "feedback-sent" | "feedback-received";
@@ -109,8 +110,9 @@ export interface PulseTrayApi {
   getQuestion(): Promise<DailyQuestion | null>;
   submitAnswer(input: { questionId: string; value: string; date: string }): Promise<SessionView>;
   skipQuestion(): Promise<SessionView>;
+  deferQuestion(): Promise<SessionView>;
   listEmployees(): Promise<EmployeeOption[]>;
-  sendFeedback(draft: FeedbackDraft): Promise<SessionView>;
+  sendFeedback(draft: FeedbackDraft, requestId: string): Promise<SessionView>;
   listFeedbackHistory(direction: "sent" | "received"): Promise<FeedbackHistoryResult>;
   saveQuietHours(windows: QuietHoursWindow[]): Promise<SessionView>;
   openManagerHub(): Promise<void>;

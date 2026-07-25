@@ -22,8 +22,13 @@ export function applyQuestionWindowMode(
   required: boolean,
   platform = process.platform
 ): void {
-  window.setFullScreen(false);
-  window.setFullScreenable(false);
+  if (required) {
+    window.setFullScreenable(true);
+    window.setFullScreen(true);
+  } else {
+    window.setFullScreen(false);
+    window.setFullScreenable(false);
+  }
   window.setMaximizable(false);
   window.setMinimizable(false);
   window.setResizable(false);

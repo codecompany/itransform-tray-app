@@ -46,6 +46,8 @@ import {
   questionModeChanged
 } from "./window-mode.js";
 import { validateFeedbackDraft } from "./feedback-validation.js";
+import { IdempotentRequestRegistry } from "./idempotent-requests.js";
+import { ReceivedFeedbackMonitor } from "./received-feedback-monitor.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const client = new PulseApiClient();
@@ -56,6 +58,7 @@ let quitting = false;
 let questionRequired = false;
 let answerInFlight = false;
 let feedbackInFlight = false;
+const feedbackRequests = new IdempotentRequestRegistry<SessionView>();
 let leadershipRefresh: Promise<void> | undefined;
 let store: SessionStore;
 let dailyQuestions: DailyQuestionCoordinator;
@@ -166,7 +169,7 @@ function loadRenderer(window: BrowserWindow, surface: "panel" | "question"): voi
 function showPanelWindow(view: Exclude<AppView, "question"> = "feedbacks"): void {
   if (!panelWindow || panelWindow.isDestroyed()) return;
   const workArea = screen.getDisplayMatching(panelWindow.getBounds()).workAreaSize;
-  const preferred = view === "feedbacks"
+  const preferred = view === "feedbacks" || view === "received-feedback"
     ? { width: 760, height: 820 }
     : { width: 520, height: 720 };
   panelWindow.setSize(
@@ -210,6 +213,25 @@ function releaseQuestionWindow(): void {
 }
 
 const launchedHidden = process.argv.includes("--hidden");
+const receivedFeedbackMonitor = new ReceivedFeedbackMonitor(
+  async () => {
+    const profile = requireProfile();
+    const result = await withAccessTokens((tokens) =>
+      client.listFeedbackHistory(tokens, profile, "received")
+    );
+    return result.feedbacks;
+  },
+  async (items) => {
+    await store.addEvent(
+      "feedback-received",
+      items.length === 1 ? "Novo feedback recebido" : `${items.length} novos feedbacks recebidos`,
+      "Abra Feedbacks recebidos para consultar."
+    );
+    showNativeNotification("feedback-received");
+  },
+  5 * 60_000,
+  async (ids) => store.setReceivedFeedbackIds(ids)
+);
 const scheduler = new DailyScheduler(async (now) => {
   const quietEnd = quietUntil([...store.quietHours()], now);
   await dailyQuestions.run(
@@ -217,8 +239,19 @@ const scheduler = new DailyScheduler(async (now) => {
     shouldPromptAutomatically(launchedHidden, now) && !quietEnd,
     quietEnd
   );
+  try {
+    await receivedFeedbackMonitor.check(now);
+  } catch (error) {
+    console.warn(JSON.stringify({
+      event: "received_feedback_check_failed",
+      status: error instanceof ApiError ? error.status : undefined
+    }));
+  }
 });
-app.setPath("userData", path.join(app.getPath("appData"), LEGACY_USER_DATA_DIRECTORY));
+const userDataDirectory = process.env.ELECTRON_ENV === "dev"
+  ? `${LEGACY_USER_DATA_DIRECTORY}-dev`
+  : LEGACY_USER_DATA_DIRECTORY;
+app.setPath("userData", path.join(app.getPath("appData"), userDataDirectory));
 
 function applicationIconPath(): string {
   return path.join(app.getAppPath(), "assets", "icon.png");
@@ -309,7 +342,8 @@ function createTray(): Tray {
   appTray.setToolTip(PRODUCT_NAME);
   appTray.setContextMenu(Menu.buildFromTemplate(createTrayMenuTemplate({
     openDailyQuestion: () => showQuestionWindow(false),
-    openFeedbacks: () => showPanelWindow("feedbacks"),
+    openSendFeedback: () => showPanelWindow("feedbacks"),
+    openReceivedFeedback: () => showPanelWindow("received-feedback"),
     openSettings: () => showPanelWindow("settings"),
     quit: () => {
       quitting = true;
@@ -324,6 +358,8 @@ async function logout(): Promise<SessionView> {
   dailyQuestions?.clear();
   setQuestionRequired(false);
   questionWindow?.hide();
+  feedbackRequests.clear();
+  receivedFeedbackMonitor.reset();
   await store.clear();
   return sessionView();
 }
@@ -388,11 +424,10 @@ function registerIpc(): void {
     ).catch(() => undefined);
     const profile = { ...linkedProfile, isLeader };
     await store.link(token, tokens, profile);
+    receivedFeedbackMonitor.reset();
     scheduler.start(false);
     setImmediate(() => {
-      const now = new Date();
-      const quietEnd = quietUntil([...store.quietHours()], now);
-      void dailyQuestions.run(now, !quietEnd, quietEnd);
+      void scheduler.check(new Date());
     });
     showNativeNotification("linked");
     return sessionView();
@@ -432,6 +467,13 @@ function registerIpc(): void {
     setImmediate(() => questionWindow?.hide());
     return sessionView();
   });
+  ipcMain.handle("question:defer", async (event) => {
+    trusted(event);
+    requireProfile();
+    await dailyQuestions.defer();
+    setImmediate(() => questionWindow?.hide());
+    return sessionView();
+  });
   ipcMain.handle("question:dismiss", (event) => {
     trusted(event);
     if (questionRequired) {
@@ -447,34 +489,37 @@ function registerIpc(): void {
     );
     return employees.filter((employee) => employee.id !== profile.id);
   });
-  ipcMain.handle("feedback:send", async (event, raw: unknown) => {
+  ipcMain.handle("feedback:send", (event, raw: unknown, rawRequestId: unknown) => {
     trusted(event);
-    if (feedbackInFlight) throw new Error("Seu feedback já está sendo enviado.");
+    const requestId = stringValue(rawRequestId, "Identificador do envio", 100);
     const draft: FeedbackDraft = validateFeedbackDraft(raw);
     const profile = requireProfile();
     if (draft.toEmployeeId === profile.id) throw new Error("Selecione outro colaborador.");
-    feedbackInFlight = true;
-    try {
-      const tokens = await accessTokens();
-      const employees = await client.listEmployees(tokens.employeeToken, profile.companyId);
-      const recipient = employees.find((employee) => employee.id === draft.toEmployeeId);
-      if (!recipient) {
-        throw new Error("O colaborador selecionado não está mais disponível. Atualize a lista.");
+    return feedbackRequests.run(requestId, async () => {
+      if (feedbackInFlight) throw new Error("Seu feedback já está sendo enviado.");
+      feedbackInFlight = true;
+      try {
+        const tokens = await accessTokens();
+        const employees = await client.listEmployees(tokens.employeeToken, profile.companyId);
+        const recipient = employees.find((employee) => employee.id === draft.toEmployeeId);
+        if (!recipient) {
+          throw new Error("O colaborador selecionado não está mais disponível. Atualize a lista.");
+        }
+        await withAccessTokens((freshTokens) =>
+          client.sendFeedback(freshTokens, profile, draft, requestId)
+        );
+        await store.addEvent(
+          "feedback-sent",
+          `Feedback enviado para ${recipient.name}`,
+          `${draft.method === "situational" ? "Situacional" : "Desenvolvimento"} · ` +
+          `importância ${draft.importance}`
+        );
+        showNativeNotification("feedback-sent");
+        return sessionView();
+      } finally {
+        feedbackInFlight = false;
       }
-      await withAccessTokens((freshTokens) =>
-        client.sendFeedback(freshTokens, profile, draft)
-      );
-      await store.addEvent(
-        "feedback-sent",
-        `Feedback enviado para ${recipient.name}`,
-        `${draft.method === "situational" ? "Situacional" : "Desenvolvimento"} · ` +
-        `importância ${draft.importance}`
-      );
-      showNativeNotification("feedback-sent");
-      return sessionView();
-    } finally {
-      feedbackInFlight = false;
-    }
+    });
   });
   ipcMain.handle("feedback:history", async (event, rawDirection: unknown) => {
     trusted(event);
@@ -555,6 +600,7 @@ if (!hasLock) {
       safeStorage
     );
     await store.load();
+    receivedFeedbackMonitor.hydrate(store.receivedFeedbackIds());
     dailyQuestions = new DailyQuestionCoordinator(
       store,
       {

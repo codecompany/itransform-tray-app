@@ -159,6 +159,10 @@ export class DailyQuestionCoordinator {
     if (!this.question || this.question.answered) {
       throw new Error("Não há uma pergunta pendente para pular.");
     }
+    await this.defer(now);
+  }
+
+  async defer(now = new Date()): Promise<void> {
     const next = snoozeQuestion({ ...this.store.daily() }, now);
     await this.store.setDaily(next, {
       kind: "system",

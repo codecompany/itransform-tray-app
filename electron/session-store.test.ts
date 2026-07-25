@@ -104,4 +104,18 @@ describe("encrypted session store", () => {
       { start: "22:00", end: "07:00" }
     ]);
   });
+
+  it("persists the received-feedback cursor in encrypted preferences", async () => {
+    const file = await sessionFile();
+    const store = new SessionStore(file, secureStorage);
+    await store.link("durable-token", tokens, profile);
+    await store.setReceivedFeedbackIds(["feedback-1", "feedback-2"]);
+
+    const persisted = await fs.readFile(file, "utf8");
+    expect(persisted).not.toContain("feedback-1");
+
+    const reopened = new SessionStore(file, secureStorage);
+    await reopened.load();
+    expect(reopened.receivedFeedbackIds()).toEqual(["feedback-1", "feedback-2"]);
+  });
 });

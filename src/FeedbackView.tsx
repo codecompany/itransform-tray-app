@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { withTimeout } from "./async";
 import type {
   EmployeeOption,
   FeedbackContent,
@@ -9,19 +10,7 @@ import type {
 
 const maxFieldLength = 600;
 
-type WizardStep =
-  | "recipient"
-  | "method"
-  | "context"
-  | "observedBehavior"
-  | "perceivedImpact"
-  | "suggestedNextStep"
-  | "continueDoing"
-  | "startDoing"
-  | "stopDoing"
-  | "review";
-
-type ContentStep = Exclude<WizardStep, "recipient" | "method" | "review">;
+type WizardStep = "recipient" | "method" | "evidence" | "guidance" | "review";
 
 function newContent(): FeedbackContent {
   return {
@@ -35,11 +24,11 @@ function newContent(): FeedbackContent {
   };
 }
 
-function newDraft(toEmployeeId = ""): FeedbackDraft {
+function newDraft(): FeedbackDraft {
   return {
-    toEmployeeId,
+    toEmployeeId: "",
     method: "",
-    importance: 3,
+    importance: 0,
     content: newContent()
   };
 }
@@ -60,7 +49,7 @@ function GuidedField({
   example,
   value,
   required = false,
-  rows = 5,
+  rows = 3,
   autoFocus = false,
   onChange
 }: {
@@ -74,13 +63,15 @@ function GuidedField({
   autoFocus?: boolean;
   onChange: (value: string) => void;
 }): JSX.Element {
+  const helpId = `${id}-help`;
+  const countId = `${id}-count`;
   return (
     <div className="field guided-field">
       <div className="label-row">
         <label htmlFor={id}>{label}{required ? " *" : ""}</label>
-        <span>{value.length}/{maxFieldLength}</span>
+        <span id={countId}>{value.length}/{maxFieldLength}</span>
       </div>
-      <small>{guidance}</small>
+      <small id={helpId}>{guidance}</small>
       <textarea
         id={id}
         value={value}
@@ -89,6 +80,7 @@ function GuidedField({
         rows={rows}
         placeholder={`Ex.: ${example}`}
         required={required}
+        aria-describedby={`${helpId} ${countId}`}
         autoFocus={autoFocus}
       />
     </div>
@@ -109,82 +101,7 @@ const methodCopy: Record<FeedbackMethod, {
   }
 };
 
-function wizardSteps(method: FeedbackDraft["method"]): WizardStep[] {
-  const content: ContentStep[] = method === "development"
-    ? ["context", "continueDoing", "startDoing", "stopDoing"]
-    : ["context", "observedBehavior", "perceivedImpact", "suggestedNextStep"];
-  return ["recipient", "method", ...content, "review"];
-}
-
-function contentCopy(
-  step: ContentStep,
-  method: FeedbackMethod
-): {
-  label: string;
-  guidance: string;
-  example: string;
-  required: boolean;
-} {
-  if (step === "context") {
-    return method === "situational"
-      ? {
-          label: "Contexto ou fato observado",
-          guidance: "Diga quando e em qual situação isso aconteceu.",
-          example: "Na apresentação ao cliente de terça-feira…",
-          required: true
-        }
-      : {
-          label: "Contexto ou evidências",
-          guidance: "Registre fatos que sustentam as orientações seguintes.",
-          example: "Nas três últimas revisões de planejamento…",
-          required: true
-        };
-  }
-  const copy: Record<Exclude<ContentStep, "context">, {
-    label: string;
-    guidance: string;
-    example: string;
-    required: boolean;
-  }> = {
-    observedBehavior: {
-      label: "Comportamento observado",
-      guidance: "Descreva o que a pessoa fez ou deixou de fazer, sem julgamentos.",
-      example: "você apresentou os riscos antes de propor a solução.",
-      required: true
-    },
-    perceivedImpact: {
-      label: "Impacto percebido",
-      guidance: "Explique o efeito sobre pessoas, trabalho ou resultados.",
-      example: "isso permitiu que o time decidisse com mais segurança.",
-      required: true
-    },
-    suggestedNextStep: {
-      label: "Próximo passo sugerido",
-      guidance: "Sugira uma ação concreta para situações futuras.",
-      example: "compartilhe esse mapa de riscos antes das próximas reuniões.",
-      required: true
-    },
-    continueDoing: {
-      label: "Continuar fazendo",
-      guidance: "Registre comportamentos positivos que devem ser mantidos, se houver.",
-      example: "continue resumindo decisões e responsáveis ao final das reuniões.",
-      required: false
-    },
-    startDoing: {
-      label: "Começar a fazer",
-      guidance: "Registre novos comportamentos que podem melhorar os resultados, se houver.",
-      example: "comece a compartilhar riscos assim que forem identificados.",
-      required: false
-    },
-    stopDoing: {
-      label: "Parar de fazer",
-      guidance: "Registre comportamentos que prejudicam o trabalho, se houver.",
-      example: "evite incluir novas prioridades sem revisar as anteriores.",
-      required: false
-    }
-  };
-  return copy[step];
-}
+const steps: WizardStep[] = ["recipient", "method", "evidence", "guidance", "review"];
 
 function stepHeading(step: WizardStep, method: FeedbackDraft["method"]): {
   title: string;
@@ -199,21 +116,80 @@ function stepHeading(step: WizardStep, method: FeedbackDraft["method"]): {
     case "method":
       return {
         title: "Escolha um formato",
-        description: "O formato organiza seu relato sem expor conceitos internos."
+        description: "Selecione a estrutura que combina melhor com o que você quer dizer."
       };
+    case "evidence":
+      return method === "development"
+        ? {
+            title: "Registre as evidências",
+            description: "Descreva fatos que sustentam suas orientações."
+          }
+        : {
+            title: "Descreva a situação",
+            description: "Registre o contexto e o comportamento observado."
+          };
+    case "guidance":
+      return method === "development"
+        ? {
+            title: "Oriente o desenvolvimento",
+            description: "Preencha ao menos uma ação: continuar, começar ou parar."
+          }
+        : {
+            title: "Explique o impacto",
+            description: "Mostre o efeito observado e sugira um próximo passo."
+          };
     case "review":
       return {
         title: "Revise e conclua",
-        description: "Defina a importância e confira o conteúdo antes do envio."
+        description: "Escolha a importância e confira todo o conteúdo antes de enviar."
       };
-    default: {
-      const copy = contentCopy(step, method || "situational");
-      return {
-        title: copy.label,
-        description: copy.guidance
-      };
-    }
   }
+}
+
+function contentIsDirty(content: FeedbackContent): boolean {
+  return Object.values(content).some((value) => value.trim());
+}
+
+function draftForSubmission(draft: FeedbackDraft): FeedbackDraft {
+  return {
+    ...draft,
+    content: draft.method === "situational"
+      ? {
+          ...draft.content,
+          continueDoing: "",
+          startDoing: "",
+          stopDoing: ""
+        }
+      : {
+          ...draft.content,
+          observedBehavior: "",
+          perceivedImpact: "",
+          suggestedNextStep: ""
+        }
+  };
+}
+
+function moveRadio(
+  event: React.KeyboardEvent<HTMLButtonElement>,
+  values: readonly string[],
+  current: string,
+  select: (value: string) => void
+): void {
+  const forward = event.key === "ArrowRight" || event.key === "ArrowDown";
+  const backward = event.key === "ArrowLeft" || event.key === "ArrowUp";
+  if (!forward && !backward && event.key !== "Home" && event.key !== "End") return;
+  event.preventDefault();
+  const currentIndex = Math.max(0, values.indexOf(current));
+  const nextIndex = event.key === "Home"
+    ? 0
+    : event.key === "End"
+      ? values.length - 1
+      : (currentIndex + (forward ? 1 : -1) + values.length) % values.length;
+  const next = values[nextIndex];
+  select(next);
+  requestAnimationFrame(() => {
+    document.querySelector<HTMLElement>(`[data-radio-value="${next}"]`)?.focus();
+  });
 }
 
 export default function FeedbackView({
@@ -229,16 +205,24 @@ export default function FeedbackView({
   const [directoryLoading, setDirectoryLoading] = useState(true);
   const [directoryError, setDirectoryError] = useState("");
   const [submitError, setSubmitError] = useState("");
+  const [confirmationPending, setConfirmationPending] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
+  const [activeEmployeeIndex, setActiveEmployeeIndex] = useState(-1);
   const [busy, setBusy] = useState(false);
   const [sent, setSent] = useState(false);
+  const [cancelled, setCancelled] = useState(false);
   const [stepIndex, setStepIndex] = useState(0);
+  const [requestId, setRequestId] = useState(() => crypto.randomUUID());
+  const headingRef = useRef<HTMLHeadingElement>(null);
 
   async function loadEmployees(): Promise<void> {
     setDirectoryLoading(true);
     setDirectoryError("");
     try {
-      setEmployees(await window.pulseTray.listEmployees());
+      setEmployees(await withTimeout(
+        window.pulseTray.listEmployees(),
+        "A lista de colaboradores demorou para responder. Tente novamente."
+      ));
     } catch (reason) {
       setDirectoryError(messageOf(reason));
     } finally {
@@ -250,6 +234,10 @@ export default function FeedbackView({
     void loadEmployees();
   }, []);
 
+  useEffect(() => {
+    headingRef.current?.focus();
+  }, [stepIndex, sent, cancelled]);
+
   const filtered = useMemo(() => {
     const normalized = query.trim().toLocaleLowerCase("pt-BR");
     const matches = normalized
@@ -260,75 +248,76 @@ export default function FeedbackView({
     return matches.slice(0, 8);
   }, [employees, query]);
 
+  useEffect(() => {
+    setActiveEmployeeIndex(filtered.length > 0 ? 0 : -1);
+  }, [query, filtered.length]);
+
+  useEffect(() => {
+    if (!searchOpen || activeEmployeeIndex < 0) return;
+    requestAnimationFrame(() => {
+      document.getElementById(`employee-option-${filtered[activeEmployeeIndex]?.id}`)
+        ?.scrollIntoView?.({ block: "nearest" });
+    });
+  }, [activeEmployeeIndex, filtered, searchOpen]);
+
   const selectedEmployee = employees.find((employee) => employee.id === draft.toEmployeeId);
-  const steps = useMemo(() => wizardSteps(draft.method), [draft.method]);
-  const boundedStepIndex = Math.min(stepIndex, steps.length - 1);
-  const currentStep = steps[boundedStepIndex];
+  const currentStep = steps[stepIndex];
   const heading = stepHeading(currentStep, draft.method);
   const hasDevelopmentAction = Boolean(
     draft.content.continueDoing.trim() ||
     draft.content.startDoing.trim() ||
     draft.content.stopDoing.trim()
   );
+  const hasSituationalEvidence = Boolean(
+    draft.content.context.trim() && draft.content.observedBehavior.trim()
+  );
+  const hasSituationalGuidance = Boolean(
+    draft.content.perceivedImpact.trim() && draft.content.suggestedNextStep.trim()
+  );
+  const hasDevelopmentEvidence = Boolean(draft.content.context.trim());
+  const hasRequiredContent = draft.method === "situational"
+    ? hasSituationalEvidence && hasSituationalGuidance
+    : hasDevelopmentEvidence && hasDevelopmentAction;
   const canSubmit = Boolean(
     selectedEmployee &&
     draft.method &&
-    draft.content.context.trim() &&
-    (
-      draft.method === "situational"
-        ? draft.content.observedBehavior.trim() &&
-          draft.content.perceivedImpact.trim() &&
-          draft.content.suggestedNextStep.trim()
-        : hasDevelopmentAction
-    )
+    hasRequiredContent &&
+    draft.importance >= 1 &&
+    draft.importance <= 5
   );
-  const canAdvance = (() => {
-    switch (currentStep) {
-      case "recipient":
-        return Boolean(selectedEmployee);
-      case "method":
-        return Boolean(draft.method);
-      case "context":
-        return Boolean(draft.content.context.trim());
-      case "observedBehavior":
-        return Boolean(draft.content.observedBehavior.trim());
-      case "perceivedImpact":
-        return Boolean(draft.content.perceivedImpact.trim());
-      case "suggestedNextStep":
-        return Boolean(draft.content.suggestedNextStep.trim());
-      case "stopDoing":
-        return hasDevelopmentAction;
-      case "review":
-        return canSubmit;
-      default:
-        return true;
-    }
-  })();
+  const canAdvance = currentStep === "recipient"
+    ? Boolean(selectedEmployee)
+    : currentStep === "method"
+      ? Boolean(draft.method)
+      : currentStep === "evidence"
+        ? draft.method === "situational" ? hasSituationalEvidence : hasDevelopmentEvidence
+        : currentStep === "guidance"
+          ? draft.method === "situational" ? hasSituationalGuidance : hasDevelopmentAction
+          : canSubmit;
+  const dirty = Boolean(
+    draft.toEmployeeId || draft.method || draft.importance || contentIsDirty(draft.content)
+  );
 
   function selectEmployee(employee: EmployeeOption): void {
-    setDraft(newDraft(employee.id));
+    setDraft((current) => ({ ...current, toEmployeeId: employee.id }));
+    setRequestId(crypto.randomUUID());
     setQuery(employee.name);
     setSearchOpen(false);
+    setActiveEmployeeIndex(-1);
     setSubmitError("");
   }
 
   function clearEmployee(): void {
-    setDraft(newDraft());
+    setDraft((current) => ({ ...current, toEmployeeId: "" }));
+    setRequestId(crypto.randomUUID());
     setQuery("");
     setSubmitError("");
     setSearchOpen(true);
-    setStepIndex(0);
   }
 
   function chooseMethod(method: FeedbackMethod): void {
-    setDraft((current) => ({
-      ...current,
-      method,
-      content: {
-        ...newContent(),
-        context: current.content.context
-      }
-    }));
+    setDraft((current) => ({ ...current, method }));
+    setRequestId(crypto.randomUUID());
     setSubmitError("");
   }
 
@@ -337,6 +326,12 @@ export default function FeedbackView({
       ...current,
       content: { ...current.content, [field]: value }
     }));
+    setRequestId(crypto.randomUUID());
+  }
+
+  function setImportance(value: number): void {
+    setDraft((current) => ({ ...current, importance: value }));
+    setRequestId(crypto.randomUUID());
   }
 
   async function submit(): Promise<void> {
@@ -344,72 +339,125 @@ export default function FeedbackView({
     setBusy(true);
     setSubmitError("");
     try {
-      onSent?.(await window.pulseTray.sendFeedback(draft));
+      onSent?.(await withTimeout(
+        window.pulseTray.sendFeedback(draftForSubmission(draft), requestId),
+        "Ainda estamos confirmando o envio. Seu texto foi preservado; verifique novamente."
+      ));
+      setConfirmationPending(false);
       setSent(true);
     } catch (reason) {
-      setSubmitError(messageOf(reason));
+      const message = messageOf(reason);
+      setSubmitError(message);
+      setConfirmationPending(message.startsWith("Ainda estamos confirmando"));
     } finally {
       setBusy(false);
     }
   }
 
   function goNext(): void {
-    if (!canAdvance || boundedStepIndex >= steps.length - 1) return;
+    if (!canAdvance || stepIndex >= steps.length - 1) return;
     setSubmitError("");
-    setStepIndex(boundedStepIndex + 1);
+    setConfirmationPending(false);
+    setStepIndex((current) => current + 1);
   }
 
   function goPrevious(): void {
-    if (boundedStepIndex === 0) return;
+    if (stepIndex === 0) return;
     setSubmitError("");
-    setStepIndex(boundedStepIndex - 1);
+    setStepIndex((current) => current - 1);
   }
 
-  function cancel(): void {
+  function reset(): void {
     setDraft(newDraft());
     setQuery("");
     setSearchOpen(false);
+    setActiveEmployeeIndex(-1);
     setSubmitError("");
     setStepIndex(0);
+    setRequestId(crypto.randomUUID());
+  }
+
+  function cancel(): void {
+    if (dirty && !window.confirm("Cancelar este feedback? O conteúdo preenchido será descartado.")) {
+      return;
+    }
+    reset();
+    setCancelled(true);
   }
 
   function goToStep(step: WizardStep): void {
-    const next = steps.indexOf(step);
-    if (next >= 0) setStepIndex(next);
+    setStepIndex(steps.indexOf(step));
   }
 
-  const reviewEntries = draft.method
-    ? steps
-        .filter((step): step is ContentStep =>
-          step !== "recipient" && step !== "method" && step !== "review"
-        )
-        .map((step) => ({
-          step,
-          label: contentCopy(step, draft.method as FeedbackMethod).label,
-          value: draft.content[step]
-        }))
-        .filter(({ value }) => value.trim())
-    : [];
+  function handleEmployeeKeyDown(event: React.KeyboardEvent<HTMLInputElement>): void {
+    if (event.key === "Escape") {
+      setSearchOpen(false);
+      setActiveEmployeeIndex(-1);
+      return;
+    }
+    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      event.preventDefault();
+      setSearchOpen(true);
+      if (!filtered.length) return;
+      setActiveEmployeeIndex((current) => {
+        const start = current < 0 ? 0 : current;
+        return (start + (event.key === "ArrowDown" ? 1 : -1) + filtered.length) % filtered.length;
+      });
+      return;
+    }
+    if (event.key === "Enter" && searchOpen && activeEmployeeIndex >= 0) {
+      event.preventDefault();
+      const employee = filtered[activeEmployeeIndex];
+      if (employee) selectEmployee(employee);
+    }
+  }
+
+  const reviewEntries: Array<{
+    step: WizardStep;
+    label: string;
+    value: string;
+  }> = draft.method === "situational"
+    ? [
+        { step: "evidence" as WizardStep, label: "Contexto", value: draft.content.context },
+        { step: "evidence" as WizardStep, label: "Comportamento observado", value: draft.content.observedBehavior },
+        { step: "guidance" as WizardStep, label: "Impacto percebido", value: draft.content.perceivedImpact },
+        { step: "guidance" as WizardStep, label: "Próximo passo", value: draft.content.suggestedNextStep }
+      ]
+    : [
+        { step: "evidence" as WizardStep, label: "Contexto", value: draft.content.context },
+        { step: "guidance" as WizardStep, label: "Continuar fazendo", value: draft.content.continueDoing },
+        { step: "guidance" as WizardStep, label: "Começar a fazer", value: draft.content.startDoing },
+        { step: "guidance" as WizardStep, label: "Parar de fazer", value: draft.content.stopDoing }
+      ].filter(({ value }) => value.trim());
 
   if (sent) {
     return (
-      <section className={embedded ? "feedback-pane" : "page"}>
-        <header className="page-header"><h2>Novo feedback</h2></header>
+      <section className={embedded ? "feedback-pane" : "page"} aria-live="polite">
         <div className="success-card">
-          <span className="success-mark">✓</span>
-          <h2>Seu feedback foi enviado com sucesso!</h2>
-          <p>A classificação acontece em segundo plano, sem interromper sua experiência.</p>
+          <span className="success-mark" aria-hidden="true">✓</span>
+          <h2 ref={headingRef} tabIndex={-1}>Seu feedback foi enviado com sucesso!</h2>
           <button
             className="secondary"
             onClick={() => {
-              setDraft(newDraft());
-              setQuery("");
-              setSearchOpen(false);
+              reset();
               setSent(false);
-              setStepIndex(0);
             }}
           >
             Enviar outro feedback
+          </button>
+        </div>
+      </section>
+    );
+  }
+
+  if (cancelled) {
+    return (
+      <section className={embedded ? "feedback-pane" : "page"} aria-live="polite">
+        <div className="empty cancelled-card">
+          <h2 ref={headingRef} tabIndex={-1}>Envio cancelado</h2>
+          <p>O conteúdo deste feedback foi descartado.</p>
+          <button className="primary" onClick={() => setCancelled(false)}>
+            Começar novo feedback
           </button>
         </div>
       </section>
@@ -430,8 +478,7 @@ export default function FeedbackView({
       >
         <div className="wizard-progress-group">
           <div className="wizard-progress-copy">
-            <span>Etapa {boundedStepIndex + 1} de {steps.length}</span>
-            <strong>{Math.round(((boundedStepIndex + 1) / steps.length) * 100)}%</strong>
+            <span>Etapa {stepIndex + 1} de {steps.length}</span>
           </div>
           <div
             className="wizard-progress"
@@ -439,18 +486,15 @@ export default function FeedbackView({
             aria-label="Progresso do envio de feedback"
             aria-valuemin={1}
             aria-valuemax={steps.length}
-            aria-valuenow={boundedStepIndex + 1}
+            aria-valuenow={stepIndex + 1}
           >
-            <span style={{ width: `${((boundedStepIndex + 1) / steps.length) * 100}%` }} />
+            <span style={{ width: `${((stepIndex + 1) / steps.length) * 100}%` }} />
           </div>
         </div>
 
         <section className="wizard-stage" aria-labelledby="wizard-step-title">
           <header className="wizard-step-heading">
-            <span>{draft.method && currentStep !== "method"
-              ? methodCopy[draft.method].title
-              : "Novo feedback"}</span>
-            <h3 id="wizard-step-title">{heading.title}</h3>
+            <h3 id="wizard-step-title" ref={headingRef} tabIndex={-1}>{heading.title}</h3>
             <p>{heading.description}</p>
           </header>
 
@@ -460,19 +504,29 @@ export default function FeedbackView({
                 <label htmlFor="employee-search">Nome ou e-mail do colaborador</label>
                 <input
                   id="employee-search"
+                  role="combobox"
                   value={query}
                   onChange={(event) => {
                     setQuery(event.target.value);
                     setSearchOpen(true);
                   }}
+                  onKeyDown={handleEmployeeKeyDown}
                   onFocus={() => setSearchOpen(true)}
                   placeholder="Digite um nome ou e-mail existente"
                   autoComplete="off"
+                  aria-autocomplete="list"
                   aria-expanded={searchOpen}
                   aria-controls="employee-results"
+                  aria-activedescendant={
+                    searchOpen && filtered[activeEmployeeIndex]
+                      ? `employee-option-${filtered[activeEmployeeIndex].id}`
+                      : undefined
+                  }
                   autoFocus
                 />
-                {directoryLoading && <small className="field-status" role="status">Carregando colaboradores…</small>}
+                {directoryLoading && (
+                  <small className="field-status" role="status">Carregando colaboradores…</small>
+                )}
                 {directoryError && (
                   <div className="field-recovery">
                     <ErrorNotice message={directoryError} />
@@ -482,20 +536,36 @@ export default function FeedbackView({
                   </div>
                 )}
                 {searchOpen && !directoryLoading && !directoryError && (
-                  <div className="search-results" id="employee-results">
-                    {filtered.length > 0 ? filtered.map((employee) => (
-                      <button
-                        type="button"
-                        key={employee.id}
-                        onClick={() => selectEmployee(employee)}
-                      >
-                        <strong>{employee.name}</strong>
-                        <span>{employee.email}{employee.position ? ` · ${employee.position}` : ""}</span>
-                      </button>
-                    )) : (
-                      <p className="search-empty">Nenhum colaborador encontrado.</p>
-                    )}
-                  </div>
+                  filtered.length > 0 ? (
+                    <div className="search-results" id="employee-results" role="listbox">
+                      {filtered.map((employee, index) => (
+                        <button
+                          type="button"
+                          role="option"
+                          aria-selected={activeEmployeeIndex === index}
+                          id={`employee-option-${employee.id}`}
+                          tabIndex={-1}
+                          key={employee.id}
+                          onMouseEnter={() => setActiveEmployeeIndex(index)}
+                          onClick={() => selectEmployee(employee)}
+                        >
+                          <strong>{employee.name}</strong>
+                          <span>
+                            {employee.email}{employee.position ? ` · ${employee.position}` : ""}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  ) : (
+                    <p
+                      className="search-results search-empty"
+                      id="employee-results"
+                      role="status"
+                      aria-live="polite"
+                    >
+                      Nenhum colaborador encontrado.
+                    </p>
+                  )
                 )}
               </div>
             ) : (
@@ -512,13 +582,21 @@ export default function FeedbackView({
           {currentStep === "method" && (
             <fieldset className="feedback-methods">
               <legend className="sr-only">Como você quer estruturar este feedback?</legend>
-              <div>
+              <div role="radiogroup" aria-label="Formato do feedback">
                 {(Object.keys(methodCopy) as FeedbackMethod[]).map((method) => (
                   <button
                     type="button"
                     role="radio"
                     aria-checked={draft.method === method}
+                    tabIndex={draft.method === method || (!draft.method && method === "situational") ? 0 : -1}
+                    data-radio-value={method}
                     className={draft.method === method ? "selected" : ""}
+                    onKeyDown={(event) => moveRadio(
+                      event,
+                      ["situational", "development"],
+                      draft.method || "situational",
+                      (value) => chooseMethod(value as FeedbackMethod)
+                    )}
                     onClick={() => chooseMethod(method)}
                     key={method}
                   >
@@ -530,67 +608,182 @@ export default function FeedbackView({
             </fieldset>
           )}
 
-          {draft.method &&
-            currentStep !== "recipient" &&
-            currentStep !== "method" &&
-            currentStep !== "review" && (
-              <div className="wizard-writing-step">
-                {draft.method === "development" && (
-                  <div className="development-hint">
-                    “Continuar”, “Começar” e “Parar” são opcionais individualmente. Preencha ao menos uma delas.
-                  </div>
-                )}
-                <GuidedField
-                  id={`feedback-${currentStep}`}
-                  {...contentCopy(currentStep, draft.method)}
-                  value={draft.content[currentStep]}
-                  autoFocus
-                  onChange={(value) => updateContent(currentStep, value)}
-                />
-                {currentStep === "stopDoing" && !hasDevelopmentAction && (
-                  <small className="wizard-requirement" role="status">
-                    Preencha ao menos uma ação de desenvolvimento para avançar.
-                  </small>
-                )}
-              </div>
-            )}
+          {currentStep === "evidence" && draft.method === "situational" && (
+            <div className="wizard-writing-step field-pair">
+              <GuidedField
+                id="feedback-context"
+                label="Contexto ou fato observado"
+                guidance="Diga quando e em qual situação isso aconteceu."
+                example="Na apresentação ao cliente de terça-feira…"
+                value={draft.content.context}
+                required
+                autoFocus
+                onChange={(value) => updateContent("context", value)}
+              />
+              <GuidedField
+                id="feedback-observedBehavior"
+                label="Comportamento observado"
+                guidance="Descreva o que a pessoa fez ou deixou de fazer, sem julgamentos."
+                example="você apresentou os riscos antes de propor a solução."
+                value={draft.content.observedBehavior}
+                required
+                onChange={(value) => updateContent("observedBehavior", value)}
+              />
+              {!hasSituationalEvidence && (
+                <small className="wizard-requirement">Preencha os dois campos para avançar.</small>
+              )}
+            </div>
+          )}
+
+          {currentStep === "guidance" && draft.method === "situational" && (
+            <div className="wizard-writing-step field-pair">
+              <GuidedField
+                id="feedback-perceivedImpact"
+                label="Impacto percebido"
+                guidance="Explique o efeito sobre pessoas, trabalho ou resultados."
+                example="isso permitiu que o time decidisse com mais segurança."
+                value={draft.content.perceivedImpact}
+                required
+                autoFocus
+                onChange={(value) => updateContent("perceivedImpact", value)}
+              />
+              <GuidedField
+                id="feedback-suggestedNextStep"
+                label="Próximo passo sugerido"
+                guidance="Sugira uma ação concreta para situações futuras."
+                example="compartilhe esse mapa de riscos antes das próximas reuniões."
+                value={draft.content.suggestedNextStep}
+                required
+                onChange={(value) => updateContent("suggestedNextStep", value)}
+              />
+              {!hasSituationalGuidance && (
+                <small className="wizard-requirement">Preencha os dois campos para avançar.</small>
+              )}
+            </div>
+          )}
+
+          {currentStep === "evidence" && draft.method === "development" && (
+            <div className="wizard-writing-step">
+              <GuidedField
+                id="feedback-context"
+                label="Contexto ou evidências"
+                guidance="Registre fatos que sustentam as orientações seguintes."
+                example="Nas três últimas revisões de planejamento…"
+                value={draft.content.context}
+                required
+                autoFocus
+                rows={5}
+                onChange={(value) => updateContent("context", value)}
+              />
+            </div>
+          )}
+
+          {currentStep === "guidance" && draft.method === "development" && (
+            <div className="wizard-writing-step development-fields">
+              <GuidedField
+                id="feedback-continueDoing"
+                label="Continuar fazendo"
+                guidance="O que vale a pena manter."
+                example="continue resumindo decisões ao final das reuniões."
+                value={draft.content.continueDoing}
+                autoFocus
+                rows={2}
+                onChange={(value) => updateContent("continueDoing", value)}
+              />
+              <GuidedField
+                id="feedback-startDoing"
+                label="Começar a fazer"
+                guidance="Que novo comportamento ajudaria."
+                example="comece a compartilhar riscos assim que forem identificados."
+                value={draft.content.startDoing}
+                rows={2}
+                onChange={(value) => updateContent("startDoing", value)}
+              />
+              <GuidedField
+                id="feedback-stopDoing"
+                label="Parar de fazer"
+                guidance="O que deveria deixar de acontecer."
+                example="evite incluir prioridades sem revisar as anteriores."
+                value={draft.content.stopDoing}
+                rows={2}
+                onChange={(value) => updateContent("stopDoing", value)}
+              />
+              {!hasDevelopmentAction && (
+                <small className="wizard-requirement" role="status">
+                  Preencha ao menos uma ação para avançar.
+                </small>
+              )}
+            </div>
+          )}
 
           {currentStep === "review" && selectedEmployee && draft.method && (
             <div className="wizard-review">
               <div className="review-overview">
-                <button type="button" onClick={() => goToStep("recipient")}>
-                  <span>Destinatário</span>
+                <button
+                  type="button"
+                  disabled={confirmationPending}
+                  onClick={() => goToStep("recipient")}
+                >
+                  <span>Destinatário · Editar</span>
                   <strong>{selectedEmployee.name}</strong>
                 </button>
-                <button type="button" onClick={() => goToStep("method")}>
-                  <span>Formato</span>
+                <button
+                  type="button"
+                  disabled={confirmationPending}
+                  onClick={() => goToStep("method")}
+                >
+                  <span>Formato · Editar</span>
                   <strong>{methodCopy[draft.method].title.replace("Feedback ", "")}</strong>
                 </button>
               </div>
               <fieldset className="importance">
-                <legend>Importância</legend>
-                <div>
+                <legend>Importância *</legend>
+                <div role="radiogroup" aria-label="Importância" aria-required="true">
                   {[1, 2, 3, 4, 5].map((value) => (
                     <button
                       type="button"
+                      role="radio"
                       aria-label={`Importância ${value} de 5`}
-                      aria-pressed={draft.importance === value}
+                      aria-checked={draft.importance === value}
+                      tabIndex={draft.importance === value || (!draft.importance && value === 1) ? 0 : -1}
+                      data-radio-value={String(value)}
                       className={draft.importance === value ? "selected" : ""}
-                      onClick={() => setDraft({ ...draft, importance: value })}
+                      disabled={confirmationPending}
+                      onKeyDown={(event) => moveRadio(
+                        event,
+                        ["1", "2", "3", "4", "5"],
+                        String(draft.importance || 1),
+                        (next) => setImportance(Number(next))
+                      )}
+                      onClick={() => setImportance(value)}
                       key={value}
                     >
                       {value}
                     </button>
                   ))}
                 </div>
-                <small>1 = menor importância · 5 = maior importância</small>
+                <small>
+                  {draft.importance === 0 && "Escolha uma opção para concluir. "}
+                  1 = menor importância · 5 = maior importância
+                </small>
               </fieldset>
               <div className="review-content" aria-label="Conteúdo para revisão">
                 {reviewEntries.map(({ step, label, value }) => (
-                  <button type="button" onClick={() => goToStep(step)} key={step}>
-                    <span>{label}</span>
+                  <article key={label}>
+                    <div>
+                      <span>{label}</span>
+                      <button
+                        type="button"
+                        className="text-button"
+                        aria-label={`Editar ${label}`}
+                        disabled={confirmationPending}
+                        onClick={() => goToStep(step)}
+                      >
+                        Editar
+                      </button>
+                    </div>
                     <p>{value}</p>
-                  </button>
+                  </article>
                 ))}
               </div>
               {submitError && <ErrorNotice message={submitError} />}
@@ -600,14 +793,19 @@ export default function FeedbackView({
 
         <footer className="wizard-actions">
           <div className="wizard-secondary-actions">
-            <button type="button" className="text-button" onClick={cancel} disabled={busy}>
+            <button
+              type="button"
+              className="text-button"
+              onClick={cancel}
+              disabled={busy || confirmationPending}
+            >
               Cancelar
             </button>
             <button
               type="button"
               className="secondary"
               onClick={goPrevious}
-              disabled={boundedStepIndex === 0 || busy}
+              disabled={stepIndex === 0 || busy || confirmationPending}
             >
               Anterior
             </button>
@@ -619,10 +817,10 @@ export default function FeedbackView({
               disabled={busy || !canSubmit}
               onClick={() => void submit()}
             >
-              {busy ? "Enviando…" : "Concluir envio"}
+              {busy ? "Enviando…" : confirmationPending ? "Verificar envio" : "Concluir envio"}
             </button>
           ) : (
-            <button type="button" className="primary" onClick={goNext} disabled={!canAdvance}>
+            <button type="button" className="primary" onClick={goNext} disabled={!canAdvance || busy}>
               Próximo
             </button>
           )}

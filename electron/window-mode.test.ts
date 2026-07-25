@@ -31,7 +31,7 @@ describe("question window mode", () => {
     }
   );
 
-  it("enforces a fixed, non-closable window without entering full screen", () => {
+  it("enforces a fixed, non-closable full-screen window", () => {
     const window = windowDouble();
 
     applyQuestionWindowMode(window, true, "darwin");
@@ -40,8 +40,8 @@ describe("question window mode", () => {
     expect(window.setMinimizable).toHaveBeenCalledWith(false);
     expect(window.setMaximizable).toHaveBeenCalledWith(false);
     expect(window.setResizable).toHaveBeenCalledWith(false);
-    expect(window.setFullScreenable).toHaveBeenCalledWith(false);
-    expect(window.setFullScreen).toHaveBeenCalledWith(false);
+    expect(window.setFullScreenable).toHaveBeenCalledWith(true);
+    expect(window.setFullScreen).toHaveBeenCalledWith(true);
     expect(window.setAlwaysOnTop).toHaveBeenCalledWith(true, "floating");
     expect(window.setVisibleOnAllWorkspaces).toHaveBeenCalledWith(true);
   });
