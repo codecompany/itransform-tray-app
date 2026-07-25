@@ -340,13 +340,15 @@ describe("PulseApiClient", () => {
           startDoing: "",
           stopDoing: ""
         }
-      }
+      },
+      "feedback-request-1"
     );
     const body = JSON.parse(fetchMock.mock.calls[0][1].body);
     expect(fetchMock.mock.calls[0][1].headers).toMatchObject({
       Authorization: "Bearer pulse-token",
       "X-PulseTray-Employee-Token": "employee-token",
-      "X-PulseTray-Knowledge-Token": "knowledge-token"
+      "X-PulseTray-Knowledge-Token": "knowledge-token",
+      "Idempotency-Key": "feedback-request-1"
     });
     expect(body).toMatchObject({
       company_id: "company",
@@ -511,7 +513,8 @@ describe("PulseApiClient", () => {
           startDoing: "",
           stopDoing: ""
         }
-      }
+      },
+      "feedback-request-2"
     );
     await expect(request).rejects.toThrow(
       "O colaborador selecionado não pôde ser validado. Atualize a lista e tente novamente."

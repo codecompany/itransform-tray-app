@@ -198,6 +198,18 @@ describe("daily question coordinator", () => {
     expect(store.daily().checkFailures).toBe(2);
   });
 
+  it("lets a required window defer after a manual load failure", async () => {
+    const { callbacks, coordinator, gateway, store } = await setup(null);
+    gateway.getQuestion.mockRejectedValue(new ApiError("unavailable", 503));
+    const now = new Date(2026, 6, 24, 10, 0, 0);
+
+    await expect(coordinator.checkNow(now)).rejects.toThrow("unavailable");
+    await coordinator.defer(now);
+
+    expect(Date.parse(store.daily().nextPromptAt!)).toBeGreaterThan(now.getTime());
+    expect(callbacks.release).toHaveBeenCalledOnce();
+  });
+
   it("does not overwrite a locally pending answer with a stale remote state", async () => {
     const { callbacks, coordinator, store } = await setup();
     const now = new Date(2026, 6, 24, 10, 0, 0);

@@ -20,6 +20,14 @@ describe("native notification policy", () => {
     expect(notice.body).not.toContain("@");
   });
 
+  it("routes received feedback to its history without exposing content", () => {
+    expect(notificationFor("feedback-received")).toEqual({
+      body: "Você recebeu um novo feedback.",
+      required: false,
+      view: "received-feedback"
+    });
+  });
+
   it("uses a generic native notice for linking", () => {
     expect(notificationFor("linked")).toEqual({
       body: "Este dispositivo foi vinculado ao iTransform Pulse.",

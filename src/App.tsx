@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import logo from "./assets/logo-iTransform.png";
+import { withTimeout } from "./async";
 import FeedbackView from "./FeedbackView";
 import type {
   AppView,
@@ -24,8 +25,10 @@ function ErrorNotice({ message }: { message: string }): JSX.Element {
 }
 
 function TokenScreen({ onLinked }: { onLinked: (session: SessionView) => void }): JSX.Element {
+  const [mode, setMode] = useState<"token" | "request">("token");
   const [email, setEmail] = useState("");
   const [token, setToken] = useState("");
+  const [showToken, setShowToken] = useState(false);
   const [requestBusy, setRequestBusy] = useState(false);
   const [linkBusy, setLinkBusy] = useState(false);
   const [requestError, setRequestError] = useState("");
@@ -38,7 +41,10 @@ function TokenScreen({ onLinked }: { onLinked: (session: SessionView) => void })
     setRequestError("");
     setSuccess("");
     try {
-      const result = await window.pulseTray.requestAccess(email);
+      const result = await withTimeout(
+        window.pulseTray.requestAccess(email),
+        "A solicitação demorou para responder. Tente novamente."
+      );
       setSuccess(result.message);
     } catch (reason) {
       setRequestError(messageOf(reason));
@@ -52,7 +58,10 @@ function TokenScreen({ onLinked }: { onLinked: (session: SessionView) => void })
     setLinkBusy(true);
     setLinkError("");
     try {
-      onLinked(await window.pulseTray.link(token));
+      onLinked(await withTimeout(
+        window.pulseTray.link(token),
+        "A validação demorou para responder. Tente novamente."
+      ));
     } catch (reason) {
       setLinkError(messageOf(reason));
     } finally {
@@ -65,11 +74,36 @@ function TokenScreen({ onLinked }: { onLinked: (session: SessionView) => void })
       <section className="welcome-card auth-card">
         <img src={logo} className="brand-logo" alt="iTransform" />
         <span className="eyebrow">iTransform Pulse</span>
-        <h1>Seu pulso diário, sem interromper o ritmo.</h1>
-        <p>Informe seu e-mail corporativo. Enviaremos um token pessoal para vincular este dispositivo.</p>
-        {success ? (
-          <>
+        <h1>Vincule este dispositivo</h1>
+        <p>
+          {mode === "token"
+            ? "Use o token pessoal recebido no onboarding."
+            : "Informe seu e-mail corporativo para solicitar um token pessoal."}
+        </p>
+        <div className="tabs auth-mode" role="group" aria-label="Forma de acesso">
+          <button
+            type="button"
+            aria-pressed={mode === "token"}
+            className={mode === "token" ? "active" : ""}
+            onClick={() => setMode("token")}
+          >
+            Tenho um token
+          </button>
+          <button
+            type="button"
+            aria-pressed={mode === "request"}
+            className={mode === "request" ? "active" : ""}
+            onClick={() => setMode("request")}
+          >
+            Solicitar token
+          </button>
+        </div>
+        {mode === "request" && (success ? (
+          <div className="stack">
             <div className="notice success" role="status">{success}</div>
+            <button type="button" className="primary" onClick={() => setMode("token")}>
+              Usar token recebido
+            </button>
             <button
               type="button"
               className="text-button"
@@ -80,7 +114,7 @@ function TokenScreen({ onLinked }: { onLinked: (session: SessionView) => void })
             >
               Solicitar novamente
             </button>
-          </>
+          </div>
         ) : (
           <form onSubmit={requestAccess} className="stack">
             <label htmlFor="corporate-email">E-mail corporativo</label>
@@ -97,25 +131,38 @@ function TokenScreen({ onLinked }: { onLinked: (session: SessionView) => void })
             <button className="primary" disabled={requestBusy || !email.trim()}>
               {requestBusy ? "Enviando…" : "Enviar meu token"}
             </button>
+            {requestError && <ErrorNotice message={requestError} />}
+          </form>
+        ))}
+        {mode === "token" && (
+          <form onSubmit={link} className="stack">
+            <label htmlFor="token">Token de acesso</label>
+            <div className="secret-input">
+              <input
+                id="token"
+                type={showToken ? "text" : "password"}
+                value={token}
+                onChange={(event) => setToken(event.target.value)}
+                placeholder="Cole seu token aqui"
+                autoComplete="off"
+                autoFocus
+                required
+              />
+              <button
+                type="button"
+                className="text-button"
+                aria-label={showToken ? "Ocultar token" : "Mostrar token"}
+                onClick={() => setShowToken((current) => !current)}
+              >
+                {showToken ? "Ocultar" : "Mostrar"}
+              </button>
+            </div>
+            {linkError && <ErrorNotice message={linkError} />}
+            <button className="primary" disabled={linkBusy || !token.trim()}>
+              {linkBusy ? "Validando…" : "Vincular dispositivo"}
+            </button>
           </form>
         )}
-        {requestError && <ErrorNotice message={requestError} />}
-        <div className="auth-divider"><span>Já recebeu seu token?</span></div>
-        <form onSubmit={link} className="stack">
-          <label htmlFor="token">Token de acesso</label>
-          <input
-            id="token"
-            value={token}
-            onChange={(event) => setToken(event.target.value)}
-            placeholder="Cole seu token aqui"
-            autoComplete="off"
-            required
-          />
-          {linkError && <ErrorNotice message={linkError} />}
-          <button className="secondary" disabled={linkBusy || !token.trim()}>
-            {linkBusy ? "Validando…" : "Vincular dispositivo"}
-          </button>
-        </form>
         <small>Seu token é pessoal e fica protegido pelo armazenamento seguro do sistema.</small>
       </section>
     </main>
@@ -135,24 +182,49 @@ function QuestionView({
   const [selected, setSelected] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(true);
+  const resultRef = useRef<HTMLParagraphElement>(null);
+  const questionTitleRef = useRef<HTMLHeadingElement>(null);
+
+  async function loadQuestion(): Promise<void> {
+    setLoading(true);
+    setError("");
+    try {
+      setQuestion(await withTimeout(
+        window.pulseTray.getQuestion(),
+        "A pergunta demorou para responder. Tente novamente."
+      ));
+    } catch (reason) {
+      setError(messageOf(reason));
+    } finally {
+      setLoading(false);
+    }
+  }
 
   useEffect(() => {
-    setError("");
-    void window.pulseTray.getQuestion()
-      .then(setQuestion)
-      .catch((reason) => setError(messageOf(reason)));
+    void loadQuestion();
   }, []);
+
+  useEffect(() => {
+    if (!loading && question !== undefined) {
+      if (!question || question.answered) resultRef.current?.focus();
+      else questionTitleRef.current?.focus();
+    }
+  }, [loading, question]);
 
   async function answer(): Promise<void> {
     if (!question || !selected || busy) return;
     setBusy(true);
     setError("");
     try {
-      const session = await window.pulseTray.submitAnswer({
-        questionId: question.question.id,
-        value: selected,
-        date: question.date
-      });
+      const session = await withTimeout(
+        window.pulseTray.submitAnswer({
+          questionId: question.question.id,
+          value: selected,
+          date: question.date
+        }),
+        "A confirmação demorou para responder. Sua seleção foi mantida; tente novamente."
+      );
       setQuestion({ ...question, answered: true, answerStatus: "pending-sync" });
       onAnswered(session);
     } catch (reason) {
@@ -167,7 +239,10 @@ function QuestionView({
     setBusy(true);
     setError("");
     try {
-      onSkipped(await window.pulseTray.skipQuestion());
+      onSkipped(await withTimeout(
+        window.pulseTray.skipQuestion(),
+        "Não foi possível adiar agora. Tente novamente."
+      ));
     } catch (reason) {
       setError(messageOf(reason));
     } finally {
@@ -175,19 +250,78 @@ function QuestionView({
     }
   }
 
-  if (error && !question) return <Page title="Questão diária"><ErrorNotice message={error} /></Page>;
-  if (question === undefined) return <PanelLoading label="Buscando a pergunta de hoje…" />;
+  async function defer(): Promise<void> {
+    if (busy) return;
+    setBusy(true);
+    setError("");
+    try {
+      onSkipped(await withTimeout(
+        window.pulseTray.deferQuestion(),
+        "Não foi possível adiar agora. Tente novamente."
+      ));
+    } catch (reason) {
+      setError(messageOf(reason));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function handleChoiceKey(
+    event: React.KeyboardEvent<HTMLButtonElement>,
+    index: number
+  ): void {
+    const forward = event.key === "ArrowRight" || event.key === "ArrowDown";
+    const backward = event.key === "ArrowLeft" || event.key === "ArrowUp";
+    if (!forward && !backward && event.key !== "Home" && event.key !== "End") return;
+    event.preventDefault();
+    if (!question) return;
+    const choices = question.question.choices;
+    const nextIndex = event.key === "Home"
+      ? 0
+      : event.key === "End"
+        ? choices.length - 1
+        : (index + (forward ? 1 : -1) + choices.length) % choices.length;
+    const next = choices[nextIndex];
+    setSelected(next.value);
+    requestAnimationFrame(() => {
+      document.getElementById(`question-choice-${next.value}`)?.focus();
+    });
+  }
+
+  if (loading) return <PanelLoading label="Buscando a pergunta de hoje…" />;
+  if (error && !question) {
+    return (
+      <Page title="Questão diária">
+        <div className="recovery-card">
+          <ErrorNotice message={error} />
+          <p>Você pode tentar buscar a pergunta novamente agora ou receber outro lembrete.</p>
+          <div>
+            <button type="button" className="primary" onClick={() => void loadQuestion()}>
+              Tentar novamente
+            </button>
+            <button type="button" className="secondary" disabled={busy} onClick={() => void defer()}>
+              {busy ? "Adiando…" : "Lembrar mais tarde"}
+            </button>
+          </div>
+        </div>
+      </Page>
+    );
+  }
   if (!question) {
     return (
       <Page title="Questão diária">
-        <div className="empty"><p>Não há pergunta disponível para hoje.</p></div>
+        <div className="empty">
+          <p ref={resultRef} tabIndex={-1}>Não há pergunta disponível para hoje.</p>
+        </div>
       </Page>
     );
   }
   if (question.answered) {
     return (
       <Page title="Questão diária">
-        <div className="empty"><p>A pergunta de hoje já foi respondida.</p></div>
+        <div className="empty">
+          <p ref={resultRef} tabIndex={-1}>A pergunta de hoje já foi respondida.</p>
+        </div>
       </Page>
     );
   }
@@ -196,16 +330,19 @@ function QuestionView({
     <Page title="Questão diária" badge={required ? "Resposta necessária" : undefined}>
       <div className="question-card">
         <span className="eyebrow">{dateLabel(question.date)}</span>
-        <h2>{question.question.text}</h2>
+        <h2 ref={questionTitleRef} tabIndex={-1}>{question.question.text}</h2>
         <div className="choices" role="radiogroup" aria-label="Alternativas">
-          {question.question.choices.map((choice) => (
+          {question.question.choices.map((choice, index) => (
             <button
               type="button"
               role="radio"
               aria-checked={selected === choice.value}
+              tabIndex={selected === choice.value || (!selected && index === 0) ? 0 : -1}
+              id={`question-choice-${choice.value}`}
               className={`choice ${selected === choice.value ? "selected" : ""}`}
               key={choice.value}
               onClick={() => setSelected(choice.value)}
+              onKeyDown={(event) => handleChoiceKey(event, index)}
               disabled={busy}
             >
               <span>{choice.value}</span>
@@ -252,32 +389,52 @@ function historySections(feedback: FeedbackHistoryItem): Array<[string, string]>
 function HistoryView({ direction }: { direction: "sent" | "received" }): JSX.Element {
   const [result, setResult] = useState<FeedbackHistoryResult>();
   const [error, setError] = useState("");
-  useEffect(() => {
+
+  async function load(): Promise<void> {
     setResult(undefined);
     setError("");
-    void window.pulseTray.listFeedbackHistory(direction)
-      .then(setResult)
-      .catch((reason) => setError(messageOf(reason)));
+    try {
+      setResult(await withTimeout(
+        window.pulseTray.listFeedbackHistory(direction),
+        "O histórico demorou para responder. Tente novamente."
+      ));
+    } catch (reason) {
+      setError(messageOf(reason));
+    }
+  }
+
+  useEffect(() => {
+    void load();
   }, [direction]);
+
   if (!result && !error) return <PanelLoading label="Buscando feedbacks…" />;
   return (
     <section
       className="feedback-pane feedback-history"
       aria-label={direction === "sent" ? "Feedbacks enviados" : "Feedbacks recebidos"}
     >
-      {error && <ErrorNotice message={error} />}
+      {error && (
+        <div className="field-recovery">
+          <ErrorNotice message={error} />
+          <button type="button" className="secondary" onClick={() => void load()}>
+            Tentar novamente
+          </button>
+        </div>
+      )}
       {result?.feedbacks.length === 0 && (
         <Empty
           icon={direction === "sent" ? "↗" : "↙"}
           title={direction === "sent" ? "Nenhum feedback enviado" : "Nenhum feedback recebido"}
-          text="Os feedbacks aparecerão aqui sem ocupar o espaço do formulário."
+          text={direction === "sent"
+            ? "Os feedbacks que você enviar aparecerão aqui."
+            : "Os feedbacks que você receber aparecerão aqui."}
         />
       )}
       {result?.feedbacks.map((feedback) => (
         <article className="history-card" key={feedback.id}>
           <div>
             <strong>{feedback.person}</strong>
-            <time>{dateLabel(feedback.date)}</time>
+            <time dateTime={feedback.date}>{dateLabel(feedback.date)}</time>
           </div>
           <span>
             {feedback.method === "situational"
@@ -301,45 +458,92 @@ function HistoryView({ direction }: { direction: "sent" | "received" }): JSX.Ele
 }
 
 function FeedbacksView({
-  onChange
+  onChange,
+  requestedTab
 }: {
   onChange: (session: SessionView) => void;
+  requestedTab: "new" | "received";
 }): JSX.Element {
-  const [tab, setTab] = useState<"new" | "sent" | "received">("new");
+  type FeedbackTab = "new" | "sent" | "received";
+  const tabs: FeedbackTab[] = ["new", "sent", "received"];
+  const [tab, setTab] = useState<FeedbackTab>(requestedTab);
+  const tabListRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => setTab(requestedTab), [requestedTab]);
+
+  function moveTab(event: React.KeyboardEvent<HTMLButtonElement>, current: FeedbackTab): void {
+    const forward = event.key === "ArrowRight" || event.key === "ArrowDown";
+    const backward = event.key === "ArrowLeft" || event.key === "ArrowUp";
+    if (!forward && !backward && event.key !== "Home" && event.key !== "End") return;
+    event.preventDefault();
+    const currentIndex = tabs.indexOf(current);
+    const nextIndex = event.key === "Home"
+      ? 0
+      : event.key === "End"
+        ? tabs.length - 1
+        : (currentIndex + (forward ? 1 : -1) + tabs.length) % tabs.length;
+    const next = tabs[nextIndex];
+    setTab(next);
+    requestAnimationFrame(() => {
+      tabListRef.current?.querySelector<HTMLElement>(`#feedback-tab-${next}`)?.focus();
+    });
+  }
+
+  const labels: Record<FeedbackTab, string> = {
+    new: "Novo feedback",
+    sent: "Enviados",
+    received: "Recebidos"
+  };
+
   return (
     <Page title="Feedbacks">
-      <div className="tabs feedback-tabs" role="tablist" aria-label="Criar e consultar feedbacks">
-        <button
-          type="button"
-          role="tab"
-          aria-selected={tab === "new"}
-          className={tab === "new" ? "active" : ""}
-          onClick={() => setTab("new")}
-        >
-          Novo feedback
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={tab === "sent"}
-          className={tab === "sent" ? "active" : ""}
-          onClick={() => setTab("sent")}
-        >
-          Enviados
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={tab === "received"}
-          className={tab === "received" ? "active" : ""}
-          onClick={() => setTab("received")}
-        >
-          Recebidos
-        </button>
+      <div
+        className="tabs feedback-tabs"
+        role="tablist"
+        aria-label="Criar e consultar feedbacks"
+        ref={tabListRef}
+      >
+        {tabs.map((item) => (
+          <button
+            type="button"
+            role="tab"
+            id={`feedback-tab-${item}`}
+            aria-controls={`feedback-panel-${item}`}
+            aria-selected={tab === item}
+            tabIndex={tab === item ? 0 : -1}
+            className={tab === item ? "active" : ""}
+            onKeyDown={(event) => moveTab(event, item)}
+            onClick={() => setTab(item)}
+            key={item}
+          >
+            {labels[item]}
+          </button>
+        ))}
       </div>
-      {tab === "new" && <FeedbackView embedded onSent={onChange} />}
-      {tab === "sent" && <HistoryView direction="sent" />}
-      {tab === "received" && <HistoryView direction="received" />}
+      <div
+        id="feedback-panel-new"
+        role="tabpanel"
+        aria-labelledby="feedback-tab-new"
+        hidden={tab !== "new"}
+      >
+        <FeedbackView embedded onSent={onChange} />
+      </div>
+      <div
+        id="feedback-panel-sent"
+        role="tabpanel"
+        aria-labelledby="feedback-tab-sent"
+        hidden={tab !== "sent"}
+      >
+        {tab === "sent" && <HistoryView direction="sent" />}
+      </div>
+      <div
+        id="feedback-panel-received"
+        role="tabpanel"
+        aria-labelledby="feedback-tab-received"
+        hidden={tab !== "received"}
+      >
+        {tab === "received" && <HistoryView direction="received" />}
+      </div>
     </Page>
   );
 }
@@ -356,18 +560,48 @@ function SettingsView({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [saved, setSaved] = useState(false);
+  const savedQuietHours = JSON.stringify(session.quietHours);
+  const dirty = JSON.stringify(quietHours) !== savedQuietHours;
+  const validationError = quietHours.length > 12
+    ? "Use no máximo 12 janelas de silêncio."
+    : quietHours.some((window) => !window.start || !window.end || window.start === window.end)
+      ? "Cada janela deve ter horários de início e fim diferentes."
+      : new Set(quietHours.map((window) => `${window.start}-${window.end}`)).size !== quietHours.length
+        ? "Remova as janelas de silêncio duplicadas."
+        : "";
+
+  function updateQuietHours(next: typeof quietHours): void {
+    setQuietHours(next);
+    setSaved(false);
+    setError("");
+  }
 
   async function logout(): Promise<void> {
     if (!window.confirm("Deseja desvincular este dispositivo?")) return;
-    onChange(await window.pulseTray.logout());
+    setBusy(true);
+    setError("");
+    try {
+      onChange(await withTimeout(
+        window.pulseTray.logout(),
+        "O logout demorou para responder. Tente novamente."
+      ));
+    } catch (reason) {
+      setError(messageOf(reason));
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function saveQuietHours(): Promise<void> {
+    if (!dirty || validationError) return;
     setBusy(true);
     setError("");
     setSaved(false);
     try {
-      onChange(await window.pulseTray.saveQuietHours(quietHours));
+      onChange(await withTimeout(
+        window.pulseTray.saveQuietHours(quietHours),
+        "Os ajustes demoraram para responder. Tente novamente."
+      ));
       setSaved(true);
     } catch (reason) {
       setError(messageOf(reason));
@@ -403,7 +637,7 @@ function SettingsView({
                   type="time"
                   aria-label={`Início da janela ${index + 1}`}
                   value={window.start}
-                  onChange={(event) => setQuietHours(quietHours.map((item, itemIndex) =>
+                  onChange={(event) => updateQuietHours(quietHours.map((item, itemIndex) =>
                     itemIndex === index ? { ...item, start: event.target.value } : item
                   ))}
                 />
@@ -414,7 +648,7 @@ function SettingsView({
                   type="time"
                   aria-label={`Fim da janela ${index + 1}`}
                   value={window.end}
-                  onChange={(event) => setQuietHours(quietHours.map((item, itemIndex) =>
+                  onChange={(event) => updateQuietHours(quietHours.map((item, itemIndex) =>
                     itemIndex === index ? { ...item, end: event.target.value } : item
                   ))}
                 />
@@ -423,7 +657,7 @@ function SettingsView({
                 type="button"
                 className="icon-button"
                 aria-label={`Remover janela ${index + 1}`}
-                onClick={() => setQuietHours(quietHours.filter((_, itemIndex) => itemIndex !== index))}
+                onClick={() => updateQuietHours(quietHours.filter((_, itemIndex) => itemIndex !== index))}
               >
                 ×
               </button>
@@ -433,17 +667,24 @@ function SettingsView({
         <button
           type="button"
           className="quiet-add"
-          onClick={() => setQuietHours([...quietHours, { start: "22:00", end: "07:00" }])}
+          disabled={quietHours.length >= 12}
+          onClick={() => updateQuietHours([...quietHours, { start: "22:00", end: "07:00" }])}
         >
           + Adicionar janela
         </button>
         {error && <ErrorNotice message={error} />}
+        {validationError && <ErrorNotice message={validationError} />}
         {saved && <div className="notice success" role="status">Janelas de silêncio salvas.</div>}
-        <button type="button" className="secondary" disabled={busy} onClick={saveQuietHours}>
+        <button
+          type="button"
+          className="secondary"
+          disabled={busy || !dirty || Boolean(validationError)}
+          onClick={saveQuietHours}
+        >
           {busy ? "Salvando…" : "Salvar janelas"}
         </button>
       </section>
-      <button className="danger-link" onClick={logout}>Fazer logout</button>
+      <button className="danger-link" disabled={busy} onClick={logout}>Fazer logout</button>
     </Page>
   );
 }
@@ -466,7 +707,12 @@ function Page({
 }
 
 function PanelLoading({ label }: { label: string }): JSX.Element {
-  return <div className="panel-loading"><span /><p>{label}</p></div>;
+  return (
+    <div className="panel-loading" role="status" aria-live="polite" aria-busy="true">
+      <span aria-hidden="true" />
+      <p>{label}</p>
+    </div>
+  );
 }
 
 function Empty({ icon, title, text }: { icon: string; title: string; text: string }): JSX.Element {
@@ -512,19 +758,40 @@ export default function App(): JSX.Element {
   const [navigationKey, setNavigationKey] = useState(0);
   const [error, setError] = useState("");
 
+  async function loadSession(): Promise<void> {
+    setError("");
+    try {
+      setSession(await withTimeout(
+        window.pulseTray.bootstrap(),
+        "O iTransform Pulse demorou para abrir. Tente novamente."
+      ));
+    } catch (reason) {
+      setError(messageOf(reason));
+    }
+  }
+
   useEffect(() => {
-    void window.pulseTray.bootstrap().then(setSession).catch((reason) => setError(messageOf(reason)));
+    void loadSession();
     return window.pulseTray.onNavigate((next, isRequired) => {
       if (surface === "question" && next !== "question") return;
       if (surface === "panel" && next === "question") return;
-      void window.pulseTray.bootstrap().then(setSession).catch((reason) => setError(messageOf(reason)));
+      void loadSession();
       setRequired(isRequired);
       setView(next);
       setNavigationKey((current) => current + 1);
     });
   }, [surface]);
 
-  if (error) return <main className="fatal"><ErrorNotice message={error} /></main>;
+  if (error && !session) {
+    return (
+      <main className="fatal">
+        <ErrorNotice message={error} />
+        <button type="button" className="primary" onClick={() => void loadSession()}>
+          Tentar novamente
+        </button>
+      </main>
+    );
+  }
   if (!session) return <PanelLoading label="Abrindo o iTransform Pulse…" />;
   if (!session.linked) {
     if (surface === "question") return <PanelLoading label="Aguardando a vinculação…" />;
@@ -570,12 +837,14 @@ export default function App(): JSX.Element {
         <img src={logo} alt="iTransform" />
         <nav aria-label="Navegação principal">
           <button
-            className={view === "feedbacks" ? "active" : ""}
+            className={view === "feedbacks" || view === "received-feedback" ? "active" : ""}
+            aria-current={view === "feedbacks" || view === "received-feedback" ? "page" : undefined}
             onClick={() => setView("feedbacks")}
             title="Feedbacks"
+            aria-label="Feedbacks"
           >
-            <span><FeedbackIcon /></span>
-            Feedbacks
+            <span className="nav-icon"><FeedbackIcon /></span>
+            <span className="nav-label">Feedbacks</span>
           </button>
           {session.profile?.isLeader && (
             <button
@@ -584,29 +853,51 @@ export default function App(): JSX.Element {
               title="Abrir ManagerHub no navegador"
               aria-label="Abrir ManagerHub no navegador"
             >
-              <span>
+              <span className="nav-icon">
                 <ManagerIcon />
                 <span className="external-link-badge" aria-hidden="true">↗</span>
               </span>
-              ManagerHub
+              <span className="nav-label">ManagerHub</span>
             </button>
           )}
           <button
             className={view === "settings" ? "active" : ""}
+            aria-current={view === "settings" ? "page" : undefined}
             onClick={() => setView("settings")}
             title="Ajustes"
+            aria-label="Ajustes"
           >
-            <span><SettingsIcon /></span>
-            Ajustes
+            <span className="nav-icon"><SettingsIcon /></span>
+            <span className="nav-label">Ajustes</span>
           </button>
         </nav>
-        <div className="user-mini" title={session.profile?.name}>
+        <div
+          className="user-mini"
+          title={session.profile?.name}
+          role="img"
+          aria-label={`Usuário: ${session.profile?.name}`}
+        >
           {session.profile?.name.slice(0, 1).toUpperCase()}
         </div>
       </aside>
       <main className="content">
-        {view === "feedbacks" && <FeedbacksView onChange={setSession} />}
-        {view === "settings" && <SettingsView session={session} onChange={setSession} />}
+        {error && (
+          <div className="inline-recovery">
+            <ErrorNotice message={error} />
+            <button type="button" className="secondary" onClick={() => void loadSession()}>
+              Tentar novamente
+            </button>
+          </div>
+        )}
+        <div hidden={view !== "feedbacks" && view !== "received-feedback"}>
+          <FeedbacksView
+            onChange={setSession}
+            requestedTab={view === "received-feedback" ? "received" : "new"}
+          />
+        </div>
+        <div hidden={view !== "settings"}>
+          <SettingsView session={session} onChange={setSession} />
+        </div>
       </main>
     </div>
   );

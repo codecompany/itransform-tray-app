@@ -1,5 +1,5 @@
 :root {
-  font-family: Inter, Lato, Montserrat, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-family: Inter, Lato, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   color: #0f172a;
   background: #f5f7f6;
   font-synthesis: none;
@@ -7,8 +7,8 @@
   --forest-dark: #1c3b31;
   --forest-soft: #e9f0ed;
   --slate: #0f172a;
-  --muted: #64748b;
-  --line: #dfe6e3;
+  --muted: #526275;
+  --line: #a5b5af;
   --surface: #ffffff;
   --danger: #b42318;
   --shadow: 0 18px 50px rgba(15, 30, 23, 0.12);
@@ -63,14 +63,21 @@ button:focus-visible,
 input:focus-visible,
 select:focus-visible,
 textarea:focus-visible {
-  outline: 3px solid rgba(67, 103, 90, 0.22);
+  outline: 3px solid #1f5a45;
   outline-offset: 2px;
 }
 
 h1,
 h2,
+h3,
 p {
   margin-top: 0;
+}
+
+h1,
+h2,
+h3 {
+  font-family: Montserrat, Inter, Lato, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 
 .welcome {
@@ -100,14 +107,36 @@ p {
   margin-top: 4px;
 }
 
+.auth-mode {
+  margin-bottom: 18px;
+}
+
+.secret-input {
+  position: relative;
+}
+
+.secret-input input {
+  padding-right: 82px;
+}
+
+.secret-input .text-button {
+  position: absolute;
+  top: 0;
+  right: 4px;
+  min-height: 44px;
+  margin: 0;
+}
+
 .text-button {
-  display: block;
+  display: inline-grid;
+  min-height: 44px;
+  place-items: center;
   margin: 8px auto 0;
   border: 0;
-  padding: 4px 8px;
+  padding: 8px 10px;
   color: var(--forest);
   background: transparent;
-  font-size: 0.72rem;
+  font-size: 0.78rem;
   font-weight: 750;
 }
 
@@ -200,7 +229,7 @@ input,
 select,
 textarea {
   width: 100%;
-  border: 1px solid #cfd9d5;
+  border: 1px solid #82978f;
   border-radius: 11px;
   color: var(--slate);
   background: #fff;
@@ -283,7 +312,7 @@ textarea:focus {
   display: grid;
   width: 100%;
   height: 100%;
-  grid-template-columns: 88px minmax(0, 1fr);
+  grid-template-columns: 72px minmax(0, 1fr);
   background: #f5f7f6;
 }
 
@@ -292,13 +321,13 @@ textarea:focus {
   min-height: 0;
   flex-direction: column;
   align-items: center;
-  padding: 24px 10px 16px;
+  padding: 24px 7px 16px;
   color: #fff;
   background: linear-gradient(180deg, #14261f, #1c3b31 58%, #315447);
 }
 
 .sidebar > img {
-  width: 57px;
+  width: 48px;
   height: auto;
   margin: 2px 0 30px;
   filter: brightness(0) invert(1);
@@ -324,7 +353,7 @@ textarea:focus {
   font-weight: 650;
 }
 
-.sidebar nav button > span {
+.sidebar nav button > .nav-icon {
   position: relative;
   display: grid;
   width: 25px;
@@ -334,6 +363,15 @@ textarea:focus {
   border-radius: 8px;
   font-size: 0.86rem;
   font-weight: 800;
+}
+
+.sidebar nav button > .nav-label {
+  display: none;
+  width: auto;
+  height: auto;
+  border: 0;
+  border-radius: 0;
+  line-height: 1.2;
 }
 
 .external-link-badge {
@@ -360,7 +398,7 @@ textarea:focus {
   background: var(--forest);
 }
 
-.sidebar nav button > span svg {
+.sidebar nav button > .nav-icon svg {
   width: 21px;
   height: 21px;
   fill: none;
@@ -376,7 +414,11 @@ textarea:focus {
   background: rgba(255, 255, 255, 0.12);
 }
 
-.sidebar nav button.active > span {
+.sidebar nav button:focus-visible {
+  outline-color: #ffffff;
+}
+
+.sidebar nav button.active > .nav-icon {
   color: var(--forest-dark);
   border-color: #fff;
   background: #fff;
@@ -451,8 +493,8 @@ textarea:focus {
 
 .question-close {
   display: grid;
-  width: 34px;
-  height: 34px;
+  width: 44px;
+  height: 44px;
   place-items: center;
   border: 0;
   border-radius: 10px;
@@ -549,7 +591,7 @@ textarea:focus {
   grid-template-columns: 32px minmax(0, 1fr);
   align-items: center;
   gap: 10px;
-  border: 1px solid #dde5e2;
+  border: 1px solid #82978f;
   border-radius: 11px;
   padding: 7px 10px;
   color: #334155;
@@ -655,12 +697,12 @@ textarea:focus {
 }
 
 .tabs button {
-  min-height: 36px;
+  min-height: 44px;
   border: 0;
   border-radius: 9px;
   color: var(--muted);
   background: transparent;
-  font-size: 0.76rem;
+  font-size: 0.78rem;
   font-weight: 750;
 }
 
@@ -703,11 +745,11 @@ textarea:focus {
 }
 
 .structured-feedback-form {
-  min-height: 510px;
+  min-height: 520px;
   grid-template-rows: auto minmax(0, 1fr) auto;
-  gap: 18px;
-  overflow: hidden;
-  padding: 24px 26px 22px;
+  gap: 14px;
+  overflow: visible;
+  padding: 20px 26px 18px;
 }
 
 .wizard-progress-group {
@@ -720,7 +762,7 @@ textarea:focus {
   align-items: center;
   justify-content: space-between;
   color: var(--muted);
-  font-size: 0.66rem;
+  font-size: 0.75rem;
   font-weight: 750;
 }
 
@@ -783,9 +825,9 @@ textarea:focus {
 }
 
 .wizard-writing-step .guided-field textarea {
-  height: 172px;
-  min-height: 172px;
-  resize: none;
+  height: auto;
+  min-height: 86px;
+  resize: vertical;
 }
 
 .wizard-requirement {
@@ -796,10 +838,10 @@ textarea:focus {
 
 .wizard-actions {
   display: grid;
-  grid-template-columns: minmax(118px, 0.65fr) minmax(160px, 1fr);
+  grid-template-columns: minmax(200px, 1fr) minmax(150px, 0.8fr);
   gap: 10px;
   border-top: 1px solid var(--line);
-  padding-top: 16px;
+  padding-top: 10px;
 }
 
 .wizard-actions .primary,
@@ -824,7 +866,7 @@ textarea:focus {
 
 .wizard-review {
   display: grid;
-  gap: 14px;
+  gap: 10px;
 }
 
 .review-overview {
@@ -834,11 +876,11 @@ textarea:focus {
 }
 
 .review-overview button,
-.review-content button {
+.review-content article {
   display: grid;
   min-width: 0;
   gap: 4px;
-  border: 1px solid #dce5e1;
+  border: 1px solid #82978f;
   border-radius: 10px;
   padding: 9px 11px;
   color: var(--slate);
@@ -847,7 +889,7 @@ textarea:focus {
 }
 
 .review-overview button:hover,
-.review-content button:hover {
+.review-content article:hover {
   border-color: var(--forest);
   background: #f1f7f4;
 }
@@ -864,6 +906,7 @@ textarea:focus {
   overflow: hidden;
   font-size: 0.73rem;
   text-overflow: ellipsis;
+  text-transform: capitalize;
   white-space: nowrap;
 }
 
@@ -873,19 +916,30 @@ textarea:focus {
   gap: 7px;
 }
 
-.review-content button {
-  min-height: 55px;
+.review-content article {
+  min-height: 72px;
 }
 
 .review-content p {
-  display: -webkit-box;
-  overflow: hidden;
   margin: 0;
   color: #475569;
-  font-size: 0.67rem;
-  line-height: 1.35;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
+  font-size: 0.78rem;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+
+.review-content article > div {
+  display: flex;
+  min-height: 36px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.review-content article .text-button {
+  min-height: 44px;
+  margin: 0;
+  padding: 4px 8px;
 }
 
 .feedback-methods {
@@ -907,7 +961,7 @@ textarea:focus {
   min-height: 108px;
   align-content: start;
   gap: 7px;
-  border: 1px solid #d7e0dc;
+  border: 1px solid #82978f;
   border-radius: 13px;
   padding: 15px;
   color: var(--slate);
@@ -1105,8 +1159,8 @@ textarea:focus {
 }
 
 .importance button {
-  height: 39px;
-  border: 1px solid #d7e0dc;
+  min-height: 44px;
+  border: 1px solid #82978f;
   border-radius: 9px;
   color: var(--forest);
   background: #fff;
@@ -1359,7 +1413,7 @@ textarea:focus {
 
 .quiet-hours-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 34px;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 44px;
   align-items: end;
   gap: 8px;
 }
@@ -1375,13 +1429,13 @@ textarea:focus {
 }
 
 .quiet-hours-row input {
-  min-height: 38px;
+  min-height: 44px;
   padding-inline: 8px;
 }
 
 .icon-button {
-  width: 34px;
-  height: 38px;
+  width: 44px;
+  height: 44px;
   border: 1px solid #ead1ce;
   border-radius: 9px;
   color: var(--danger);
@@ -1390,6 +1444,7 @@ textarea:focus {
 }
 
 .quiet-add {
+  min-height: 44px;
   justify-self: start;
   border: 0;
   padding: 6px 0;
@@ -1403,6 +1458,7 @@ textarea:focus {
   width: 100%;
   margin-top: 18px;
   border: 0;
+  min-height: 44px;
   padding: 10px;
   color: var(--danger);
   background: transparent;
@@ -1414,7 +1470,118 @@ textarea:focus {
   display: grid;
   min-height: 100%;
   place-items: center;
+  align-content: center;
+  gap: 14px;
   padding: 30px;
+}
+
+.recovery-card {
+  display: grid;
+  gap: 14px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 22px;
+  background: var(--surface);
+}
+
+.inline-recovery {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 16px 28px 0;
+}
+
+.recovery-card > p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.86rem;
+  line-height: 1.5;
+}
+
+.recovery-card > div:last-child {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.field-pair {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.development-fields {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.development-fields .guided-field {
+  align-content: start;
+}
+
+.search-results [role="option"] {
+  min-height: 52px;
+}
+
+.search-results [role="option"][aria-selected="true"] {
+  background: #e9f0ed;
+  box-shadow: inset 3px 0 0 var(--forest);
+}
+
+.cancelled-card {
+  min-height: 420px;
+}
+
+.cancelled-card .primary {
+  margin-top: 8px;
+}
+
+.wizard-step-heading h3:focus {
+  outline: none;
+}
+
+.success-card h2:focus,
+.question-card h2:focus {
+  border-radius: 5px;
+  outline: 2px solid var(--forest);
+  outline-offset: 4px;
+}
+
+.guided-field > small,
+.field-status,
+.label-row span,
+.importance small,
+.wizard-requirement,
+.auth-divider,
+.eyebrow,
+.welcome-card > small,
+.question-card > small,
+.review-overview span,
+.review-content span,
+.review-overview strong,
+.search-results button span,
+.selected-recipient span,
+.quiet-hours-row label > span,
+.details dt,
+.details dd,
+.profile-card span,
+.history-card dt,
+.sidebar nav button,
+.page-header > span {
+  font-size: 0.75rem;
+}
+
+.wizard-step-heading > span,
+.wizard-step-heading p,
+.feedback-methods button span,
+.feedback-heading p,
+.history-card strong,
+.history-card time,
+.history-card > span {
+  font-size: 0.78rem;
+}
+
+.event-row time {
+  color: var(--muted);
+  font-size: 0.75rem;
 }
 
 @media (max-width: 470px) {
@@ -1428,6 +1595,10 @@ textarea:focus {
 
   .sidebar > img {
     width: 48px;
+  }
+
+  .sidebar nav button > .nav-label {
+    display: none;
   }
 
   .page {
@@ -1457,7 +1628,24 @@ textarea:focus {
   }
 
   .wizard-actions {
-    grid-template-columns: 0.8fr 1.2fr;
+    grid-template-columns: 1fr;
+  }
+
+  .wizard-secondary-actions {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .field-pair,
+  .development-fields {
+    grid-template-columns: 1fr;
+  }
+
+  .development-fields .guided-field textarea {
+    min-height: 72px;
+  }
+
+  .review-overview {
+    grid-template-columns: 1fr;
   }
 
   .feedback-tabs button {
@@ -1472,5 +1660,59 @@ textarea:focus {
   .question-stage-panel {
     border-radius: 18px;
     padding: 14px;
+  }
+}
+
+@media (max-width: 380px) {
+  .app-shell {
+    grid-template-columns: 62px minmax(0, 1fr);
+  }
+
+  .sidebar {
+    padding-inline: 5px;
+  }
+
+  .sidebar > img {
+    width: 43px;
+  }
+
+  .page {
+    padding: 18px 12px 28px;
+  }
+
+  .feedback-form,
+  .structured-feedback-form {
+    padding: 16px 14px;
+  }
+
+  .feedback-tabs {
+    grid-template-columns: 1fr;
+  }
+
+  .importance > div {
+    grid-template-columns: repeat(3, minmax(44px, 1fr));
+  }
+
+  .quiet-hours-row {
+    grid-template-columns: 1fr 44px;
+  }
+
+  .quiet-hours-row label:first-child {
+    grid-column: 1 / -1;
+  }
+
+  .recovery-card > div:last-child {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
   }
 }

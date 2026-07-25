@@ -3,6 +3,7 @@ import type { AppView } from "../src/contracts.js";
 export type NativeNotificationKind =
   | "daily-question"
   | "feedback-sent"
+  | "feedback-received"
   | "linked";
 
 export interface NativeNotificationPolicy {
@@ -24,6 +25,12 @@ export function notificationFor(kind: NativeNotificationKind): NativeNotificatio
         body: "Seu feedback foi enviado com sucesso.",
         required: false,
         view: "feedbacks"
+      };
+    case "feedback-received":
+      return {
+        body: "Você recebeu um novo feedback.",
+        required: false,
+        view: "received-feedback"
       };
     case "linked":
       return {

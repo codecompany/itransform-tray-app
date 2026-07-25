@@ -40,6 +40,7 @@ export class SessionStore {
   private state: PersistedSession = { events: [] };
   private dailyState = emptyDailyState();
   private quietHoursState: QuietHoursWindow[] = [];
+  private receivedFeedbackIdsState: string[] | undefined;
 
   constructor(
     private readonly file: string,
@@ -52,7 +53,7 @@ export class SessionStore {
       this.state = JSON.parse(raw) as PersistedSession;
       this.state.events ??= [];
       this.dailyState = this.loadDailyState();
-      this.quietHoursState = this.loadQuietHours();
+      this.loadPreferences();
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
         await this.clear();
@@ -72,6 +73,10 @@ export class SessionStore {
     return this.quietHoursState;
   }
 
+  receivedFeedbackIds(): readonly string[] | undefined {
+    return this.receivedFeedbackIdsState;
+  }
+
   token(): string {
     if (!this.state.tokenCipher) throw new Error("Vincule seu token antes de continuar.");
     return this.decrypt(this.state.tokenCipher);
@@ -86,6 +91,7 @@ export class SessionStore {
     this.assertEncryption();
     this.dailyState = emptyDailyState();
     this.quietHoursState = [];
+    this.receivedFeedbackIdsState = undefined;
     this.state = {
       tokenCipher: this.encrypt(token),
       tokensCipher: this.encrypt(JSON.stringify(tokens)),
@@ -121,6 +127,11 @@ export class SessionStore {
     await this.save();
   }
 
+  async setReceivedFeedbackIds(ids: readonly string[]): Promise<void> {
+    this.receivedFeedbackIdsState = [...new Set(ids.filter((id) => Boolean(id)))].slice(0, 500);
+    await this.save();
+  }
+
   async addEvent(kind: ActivityEvent["kind"], title: string, detail: string): Promise<void> {
     this.event({ kind, title, detail });
     await this.save();
@@ -130,6 +141,7 @@ export class SessionStore {
     this.state = { events: [] };
     this.dailyState = emptyDailyState();
     this.quietHoursState = [];
+    this.receivedFeedbackIdsState = undefined;
     await fs.rm(this.file, { force: true });
   }
 
@@ -159,22 +171,32 @@ export class SessionStore {
     this.state.events = this.state.events.slice(0, 200);
   }
 
-  private loadQuietHours(): QuietHoursWindow[] {
-    if (!this.state.preferencesCipher) return [];
+  private loadPreferences(): void {
+    this.quietHoursState = [];
+    this.receivedFeedbackIdsState = undefined;
+    if (!this.state.preferencesCipher) return;
     try {
       const preferences = JSON.parse(this.decrypt(this.state.preferencesCipher)) as {
         quietHours?: unknown;
+        receivedFeedbackIds?: unknown;
       };
-      return normalizeQuietHours(preferences.quietHours);
+      this.quietHoursState = normalizeQuietHours(preferences.quietHours);
+      if (Array.isArray(preferences.receivedFeedbackIds)) {
+        this.receivedFeedbackIdsState = preferences.receivedFeedbackIds
+          .filter((id): id is string => typeof id === "string" && Boolean(id))
+          .slice(0, 500);
+      }
     } catch {
-      return [];
+      this.quietHoursState = [];
+      this.receivedFeedbackIdsState = undefined;
     }
   }
 
   private async save(): Promise<void> {
     this.state.dailyCipher = this.encrypt(JSON.stringify(this.dailyState));
     this.state.preferencesCipher = this.encrypt(JSON.stringify({
-      quietHours: this.quietHoursState
+      quietHours: this.quietHoursState,
+      receivedFeedbackIds: this.receivedFeedbackIdsState
     }));
     await fs.mkdir(path.dirname(this.file), { recursive: true });
     const temp = `${this.file}.tmp`;
