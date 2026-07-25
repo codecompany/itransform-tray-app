@@ -420,6 +420,8 @@ describe("iTransform Pulse app", () => {
     const search = await screen.findByLabelText("Nome ou e-mail do colaborador");
     expect(screen.queryByText("IPT")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Dimensão")).not.toBeInTheDocument();
+    expect(search).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByRole("option", { name: /Bruno Lima/ })).not.toBeInTheDocument();
     await userEvent.click(search);
     await userEvent.click(await screen.findByRole("option", { name: /Bruno Lima/ }));
 
@@ -465,6 +467,7 @@ describe("iTransform Pulse app", () => {
     await userEvent.click(screen.getByRole("button", { name: "Anterior" }));
     await userEvent.click(screen.getByRole("button", { name: "Trocar" }));
     expect(screen.getByLabelText("Nome ou e-mail do colaborador")).toHaveValue("");
+    expect(screen.queryByRole("option", { name: /Bruno Lima/ })).not.toBeInTheDocument();
 
     await selectRecipient();
     await nextStep();
@@ -484,7 +487,7 @@ describe("iTransform Pulse app", () => {
     );
     await nextStep();
     await userEvent.click(screen.getByRole("radio", { name: "Importância 5 de 5" }));
-    await userEvent.click(screen.getByRole("button", { name: "Concluir envio" }));
+    await userEvent.click(screen.getByRole("button", { name: "Concluir" }));
 
     expect(bridge.sendFeedback).toHaveBeenCalledWith(expect.objectContaining({
       toEmployeeId: "employee-2",
@@ -532,9 +535,9 @@ describe("iTransform Pulse app", () => {
     expect(screen.getByRole("button", { name: "Próximo" })).toBeEnabled();
     expect(screen.getByText("28/600")).toBeInTheDocument();
     await nextStep();
-    expect(screen.getByRole("button", { name: "Concluir envio" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Concluir" })).toBeDisabled();
     await userEvent.click(screen.getByRole("radio", { name: "Importância 3 de 5" }));
-    expect(screen.getByRole("button", { name: "Concluir envio" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Concluir" })).toBeEnabled();
   });
 
   it("preserves structured fields on failure", async () => {
@@ -550,7 +553,7 @@ describe("iTransform Pulse app", () => {
     await chooseMethod("situacional");
     await fillSituationalFeedback();
     await userEvent.click(screen.getByRole("radio", { name: "Importância 3 de 5" }));
-    await userEvent.click(screen.getByRole("button", { name: "Concluir envio" }));
+    await userEvent.click(screen.getByRole("button", { name: "Concluir" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("Falha temporária");
     const behaviorReview = screen.getByText("Comportamento observado").closest("article")!;
     await userEvent.click(within(behaviorReview).getByRole("button", {
@@ -574,7 +577,7 @@ describe("iTransform Pulse app", () => {
     await fillSituationalFeedback();
 
     expect(await screen.findByRole("heading", { name: "Revise e conclua" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Concluir envio" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Concluir" })).toBeInTheDocument();
     fireEvent.submit(document.querySelector("form")!);
     expect(sendFeedback).not.toHaveBeenCalled();
     expect(screen.queryByText("Seu feedback foi enviado com sucesso!")).not.toBeInTheDocument();
@@ -596,7 +599,7 @@ describe("iTransform Pulse app", () => {
     await chooseMethod("desenvolvimento");
     await fillDevelopmentFeedback();
     await userEvent.click(screen.getByRole("radio", { name: "Importância 4 de 5" }));
-    const submit = screen.getByRole("button", { name: "Concluir envio" });
+    const submit = screen.getByRole("button", { name: "Concluir" });
     await userEvent.click(submit);
     expect(submit).toBeDisabled();
     expect(sendFeedback).toHaveBeenCalledOnce();
@@ -622,9 +625,9 @@ describe("iTransform Pulse app", () => {
     await fillDevelopmentFeedback();
     await userEvent.click(screen.getByRole("radio", { name: "Importância 4 de 5" }));
 
-    await userEvent.click(screen.getByRole("button", { name: "Concluir envio" }));
+    await userEvent.click(screen.getByRole("button", { name: "Concluir" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("Confirmação indisponível");
-    await userEvent.click(screen.getByRole("button", { name: "Concluir envio" }));
+    await userEvent.click(screen.getByRole("button", { name: "Concluir" }));
     expect(await screen.findByText("Seu feedback foi enviado com sucesso!")).toBeInTheDocument();
 
     expect(sendFeedback).toHaveBeenCalledTimes(2);
