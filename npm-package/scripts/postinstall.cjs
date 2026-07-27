@@ -7,6 +7,7 @@ const http = require("node:http");
 const https = require("node:https");
 const path = require("node:path");
 const { spawnSync } = require("node:child_process");
+const { writeRuntimeManifest } = require("./npm-auto-update.cjs");
 
 function fail(message) {
   console.error(`[pulsetray] erro: ${message}`);
@@ -146,6 +147,7 @@ async function main() {
     if (!expected) throw new Error(`checksum ausente para ${asset}`);
     await download(`${base}/${asset}`, downloaded, expected);
     await install(downloaded, path.join(packageRoot, "native"));
+    writeRuntimeManifest(packageRoot);
   } finally {
     await fs.promises.rm(staging, { recursive: true, force: true });
   }
