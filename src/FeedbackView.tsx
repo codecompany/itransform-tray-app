@@ -194,10 +194,12 @@ function moveRadio(
 
 export default function FeedbackView({
   embedded = false,
+  initialRecipientId,
   onSent,
   onCancel
 }: {
   embedded?: boolean;
+  initialRecipientId?: string;
   onSent?: (session: SessionView) => void;
   onCancel?: () => void;
 }): JSX.Element {
@@ -215,6 +217,7 @@ export default function FeedbackView({
   const [stepIndex, setStepIndex] = useState(0);
   const [requestId, setRequestId] = useState(() => crypto.randomUUID());
   const headingRef = useRef<HTMLHeadingElement>(null);
+  const initialRecipientAppliedRef = useRef(false);
 
   async function loadEmployees(): Promise<void> {
     setDirectoryLoading(true);
@@ -234,6 +237,20 @@ export default function FeedbackView({
   useEffect(() => {
     void loadEmployees();
   }, []);
+
+  useEffect(() => {
+    if (
+      !initialRecipientId ||
+      directoryLoading ||
+      directoryError ||
+      initialRecipientAppliedRef.current
+    ) {
+      return;
+    }
+    initialRecipientAppliedRef.current = true;
+    const employee = employees.find((candidate) => candidate.id === initialRecipientId);
+    if (employee) selectEmployee(employee);
+  }, [directoryError, directoryLoading, employees, initialRecipientId]);
 
   useEffect(() => {
     headingRef.current?.focus();

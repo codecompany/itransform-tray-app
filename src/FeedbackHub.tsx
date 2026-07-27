@@ -489,11 +489,13 @@ function FeedbackRequestView({
 export default function FeedbackHub({
   onChange,
   requestedTab,
-  requestedAction
+  requestedAction,
+  requestedRecipientId
 }: {
   onChange: (session: SessionView) => void;
   requestedTab: FeedbackTab;
   requestedAction?: Exclude<FeedbackAction, "landing">;
+  requestedRecipientId?: string;
 }): JSX.Element {
   const [tab, setTab] = useState<FeedbackTab>(requestedTab);
   const [action, setAction] = useState<FeedbackAction>(requestedAction ?? "landing");
@@ -561,7 +563,12 @@ export default function FeedbackHub({
       >
         {action === "landing" && <FeedbackLanding onAction={setAction} />}
         {action === "send" && (
-          <FeedbackView embedded onSent={onChange} onCancel={() => setAction("landing")} />
+          <FeedbackView
+            embedded
+            initialRecipientId={requestedRecipientId}
+            onSent={onChange}
+            onCancel={() => setAction("landing")}
+          />
         )}
         {action === "request" && (
           <FeedbackRequestView onChange={onChange} onCancel={() => setAction("landing")} />
