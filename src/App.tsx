@@ -571,6 +571,7 @@ export default function App(): JSX.Element {
   );
   const [required, setRequired] = useState(false);
   const [navigationKey, setNavigationKey] = useState(0);
+  const [feedbackRequesterId, setFeedbackRequesterId] = useState<string>();
   const [error, setError] = useState("");
 
   async function loadSession(): Promise<void> {
@@ -587,12 +588,13 @@ export default function App(): JSX.Element {
 
   useEffect(() => {
     void loadSession();
-    return window.pulseTray.onNavigate((next, isRequired) => {
+    return window.pulseTray.onNavigate((next, isRequired, context) => {
       if (surface === "question" && next !== "question") return;
       if (surface === "panel" && next === "question") return;
       void loadSession();
       setRequired(isRequired);
       setView(next);
+      setFeedbackRequesterId(context?.feedbackRequesterId);
       setNavigationKey((current) => current + 1);
     });
   }, [surface]);
@@ -666,7 +668,10 @@ export default function App(): JSX.Element {
                 ? "page"
                 : undefined
             }
-            onClick={() => setView("feedbacks")}
+            onClick={() => {
+              setFeedbackRequesterId(undefined);
+              setView("feedbacks");
+            }}
             title="Feedbacks"
             aria-label="Feedbacks"
           >
@@ -727,7 +732,10 @@ export default function App(): JSX.Element {
             key={`${navigationKey}-${view}`}
             onChange={setSession}
             requestedTab={view === "received-feedback" ? "received" : "home"}
-            requestedAction={view === "request-feedback" ? "request" : undefined}
+            requestedAction={
+              feedbackRequesterId ? "send" : view === "request-feedback" ? "request" : undefined
+            }
+            requestedRecipientId={feedbackRequesterId}
           />
         </div>
         <div hidden={view !== "settings"}>

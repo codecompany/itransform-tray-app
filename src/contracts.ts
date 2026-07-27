@@ -7,6 +7,10 @@ export type AppView =
 
 export type EventKind = "system" | "feedback-sent" | "feedback-received";
 
+export interface AppNavigationContext {
+  feedbackRequesterId?: string;
+}
+
 export interface ActivityEvent {
   id: string;
   kind: EventKind;
@@ -121,5 +125,7 @@ export interface PulseTrayApi {
   openFeedbacks(): Promise<void>;
   dismissQuestion(): Promise<void>;
   logout(): Promise<SessionView>;
-  onNavigate(callback: (view: AppView, required: boolean) => void): () => void;
+  onNavigate(
+    callback: (view: AppView, required: boolean, context?: AppNavigationContext) => void
+  ): () => void;
 }

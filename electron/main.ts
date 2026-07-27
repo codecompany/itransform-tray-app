@@ -15,6 +15,7 @@ import {
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import type {
+  AppNavigationContext,
   AppView,
   EmployeeProfile,
   FeedbackDraft,
@@ -48,6 +49,11 @@ import {
 import { validateFeedbackDraft } from "./feedback-validation.js";
 import { IdempotentRequestRegistry } from "./idempotent-requests.js";
 import { ReceivedFeedbackMonitor } from "./received-feedback-monitor.js";
+import {
+  feedbackDeepLinkFromArgs,
+  parseFeedbackDeepLink,
+  pulseTrayProtocol
+} from "./deep-link.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const client = new PulseApiClient();
@@ -64,6 +70,7 @@ const feedbackRequestDeliveries = new IdempotentRequestRegistry<SessionView>();
 let leadershipRefresh: Promise<void> | undefined;
 let store: SessionStore;
 let dailyQuestions: DailyQuestionCoordinator;
+let pendingFeedbackRequesterId = feedbackDeepLinkFromArgs(process.argv)?.requesterId;
 
 function sessionView(): SessionView {
   const state = store.snapshot();
@@ -138,10 +145,11 @@ function setQuestionRequired(required: boolean): boolean {
 function sendNavigation(
   window: BrowserWindow | undefined,
   view: AppView,
-  required = false
+  required = false,
+  context?: AppNavigationContext
 ): void {
   if (!window || window.isDestroyed()) return;
-  const send = () => window.webContents.send("app:navigate", view, required);
+  const send = () => window.webContents.send("app:navigate", view, required, context);
   if (window.webContents.isLoading()) window.webContents.once("did-finish-load", send);
   else send();
 }
@@ -168,7 +176,10 @@ function loadRenderer(window: BrowserWindow, surface: "panel" | "question"): voi
   );
 }
 
-function showPanelWindow(view: Exclude<AppView, "question"> = "feedbacks"): void {
+function showPanelWindow(
+  view: Exclude<AppView, "question"> = "feedbacks",
+  feedbackRequesterId?: string
+): void {
   if (!panelWindow || panelWindow.isDestroyed()) return;
   const workArea = screen.getDisplayMatching(panelWindow.getBounds()).workAreaSize;
   const preferred = view === "feedbacks" ||
@@ -184,7 +195,34 @@ function showPanelWindow(view: Exclude<AppView, "question"> = "feedbacks"): void
   panelWindow.center();
   panelWindow.show();
   panelWindow.focus();
-  sendNavigation(panelWindow, view);
+  sendNavigation(
+    panelWindow,
+    view,
+    false,
+    feedbackRequesterId ? { feedbackRequesterId } : undefined
+  );
+}
+
+function showPendingFeedbackDeepLink(): boolean {
+  if (!pendingFeedbackRequesterId || !panelWindow || panelWindow.isDestroyed()) return false;
+  const requesterId = pendingFeedbackRequesterId;
+  pendingFeedbackRequesterId = undefined;
+  showPanelWindow("feedbacks", requesterId);
+  return true;
+}
+
+function receiveFeedbackDeepLink(input: string): boolean {
+  const parsed = parseFeedbackDeepLink(input);
+  if (!parsed) return false;
+  pendingFeedbackRequesterId = parsed.requesterId;
+  console.info(JSON.stringify({
+    event: "feedback_deep_link_received",
+    status: "accepted"
+  }));
+  if (!app.isReady() || !panelWindow || panelWindow.isDestroyed()) return true;
+  if (questionRequired) showQuestionWindow(true);
+  else showPendingFeedbackDeepLink();
+  return true;
 }
 
 function showQuestionWindow(required = false): void {
@@ -213,6 +251,9 @@ function showNativeNotification(kind: NativeNotificationKind): void {
 function releaseQuestionWindow(): void {
   if (setQuestionRequired(false)) {
     sendNavigation(questionWindow, "question", false);
+  }
+  if (pendingFeedbackRequesterId) {
+    setImmediate(() => showPendingFeedbackDeepLink());
   }
 }
 
@@ -605,7 +646,18 @@ const hasLock = app.requestSingleInstanceLock();
 if (!hasLock) {
   app.quit();
 } else {
-  app.on("second-instance", () => {
+  app.on("open-url", (event, url) => {
+    event.preventDefault();
+    receiveFeedbackDeepLink(url);
+  });
+  app.on("second-instance", (_event, argv) => {
+    const deepLink = feedbackDeepLinkFromArgs(argv);
+    if (deepLink) {
+      receiveFeedbackDeepLink(
+        `${pulseTrayProtocol}://feedback/send?requester_id=${encodeURIComponent(deepLink.requesterId)}`
+      );
+      return;
+    }
     if (questionRequired) showQuestionWindow(true);
     else showPanelWindow();
   });
@@ -616,6 +668,15 @@ if (!hasLock) {
   });
   void app.whenReady().then(async () => {
     app.setAppUserModelId(APPLICATION_ID);
+    if (process.defaultApp && process.argv[1]) {
+      app.setAsDefaultProtocolClient(
+        pulseTrayProtocol,
+        process.execPath,
+        [path.resolve(process.argv[1])]
+      );
+    } else {
+      app.setAsDefaultProtocolClient(pulseTrayProtocol);
+    }
     if (!process.argv.includes("--test-mode")) {
       app.setLoginItemSettings({
         openAtLogin: true,
@@ -673,8 +734,10 @@ if (!hasLock) {
     registerIpc();
     powerMonitor.on("resume", () => void scheduler.check(new Date()));
     if (store.snapshot().profile) scheduler.start();
-    if (!launchedHidden || !store.snapshot().profile) {
-      panelWindow.once("ready-to-show", () => showPanelWindow("feedbacks"));
+    if (!launchedHidden || !store.snapshot().profile || pendingFeedbackRequesterId) {
+      panelWindow.once("ready-to-show", () => {
+        if (!showPendingFeedbackDeepLink()) showPanelWindow("feedbacks");
+      });
     }
   });
 }

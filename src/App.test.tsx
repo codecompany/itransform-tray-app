@@ -452,6 +452,36 @@ describe("iTransform Pulse app", () => {
     expect(bridge.requestFeedback).not.toHaveBeenCalled();
   });
 
+  it("recovers the feedback request directory and lets the user change the selection", async () => {
+    const listEmployees = vi.fn()
+      .mockRejectedValueOnce(new Error("Diretório indisponível"))
+      .mockResolvedValueOnce([
+        {
+          id: "employee-2",
+          name: "Bruno Lima",
+          email: "bruno@example.com",
+          position: "Engenheiro"
+        }
+      ]);
+    window.pulseTray = api({ listEmployees });
+    render(<App />);
+
+    await userEvent.click(await screen.findByRole("button", { name: "Solicitar" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Diretório indisponível");
+    await userEvent.click(screen.getByRole("button", { name: "Tentar novamente" }));
+    await waitFor(() => expect(listEmployees).toHaveBeenCalledTimes(2));
+
+    const search = await screen.findByLabelText("Nome ou e-mail do colaborador");
+    await userEvent.type(search, "Bruno");
+    await userEvent.keyboard("{Escape}");
+    expect(search).toHaveAttribute("aria-expanded", "false");
+    await userEvent.click(search);
+    await userEvent.click(await screen.findByRole("option", { name: /Bruno Lima/ }));
+    await userEvent.click(screen.getByRole("button", { name: "Trocar" }));
+
+    expect(await screen.findByLabelText("Nome ou e-mail do colaborador")).toHaveValue("");
+  });
+
   it("asks for a recipient and feedback method without exposing internal taxonomy", async () => {
     const bridge = api({
       listEmployees: vi.fn().mockResolvedValue([
@@ -853,6 +883,50 @@ describe("iTransform Pulse app", () => {
       "true"
     ));
     expect(await screen.findByText("Nenhum feedback recebido")).toBeInTheDocument();
+  });
+
+  it("opens a feedback request link with the requester preselected", async () => {
+    let navigate: Parameters<PulseTrayApi["onNavigate"]>[0] | undefined;
+    window.pulseTray = api({
+      listEmployees: vi.fn().mockResolvedValue([
+        {
+          id: "employee-2",
+          name: "Bruno Lima",
+          email: "bruno@example.com",
+          position: "Engenheiro"
+        }
+      ]),
+      onNavigate: vi.fn((callback) => {
+        navigate = callback;
+        return () => undefined;
+      })
+    });
+    render(<App />);
+    await screen.findByText("O que você quer fazer?");
+
+    navigate?.("feedbacks", false, { feedbackRequesterId: "employee-2" });
+
+    expect(await screen.findByText("Enviar feedback para alguém")).toBeInTheDocument();
+    const recipient = await screen.findByRole("region", { name: "Colaborador selecionado" });
+    expect(within(recipient).getByText("Bruno Lima")).toBeInTheDocument();
+    expect(within(recipient).getByText(/bruno@example.com/)).toBeInTheDocument();
+  });
+
+  it("keeps the feedback form usable when a linked requester no longer resolves", async () => {
+    let navigate: Parameters<PulseTrayApi["onNavigate"]>[0] | undefined;
+    window.pulseTray = api({
+      onNavigate: vi.fn((callback) => {
+        navigate = callback;
+        return () => undefined;
+      })
+    });
+    render(<App />);
+    await screen.findByText("O que você quer fazer?");
+
+    navigate?.("feedbacks", false, { feedbackRequesterId: "former-employee" });
+
+    expect(await screen.findByText("Enviar feedback para alguém")).toBeInTheDocument();
+    expect(await screen.findByLabelText("Nome ou e-mail do colaborador")).toHaveValue("");
   });
 
   it("saves multiple quiet-hour windows instead of a preferred question time", async () => {

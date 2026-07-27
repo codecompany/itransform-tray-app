@@ -1,5 +1,6 @@
 import { contextBridge, ipcRenderer } from "electron";
 import type {
+  AppNavigationContext,
   AppView,
   FeedbackDraft,
   PulseTrayApi,
@@ -27,8 +28,12 @@ const api: PulseTrayApi = {
   dismissQuestion: () => ipcRenderer.invoke("question:dismiss"),
   logout: () => ipcRenderer.invoke("session:logout"),
   onNavigate: (callback) => {
-    const listener = (_event: Electron.IpcRendererEvent, view: AppView, required: boolean) =>
-      callback(view, required);
+    const listener = (
+      _event: Electron.IpcRendererEvent,
+      view: AppView,
+      required: boolean,
+      context?: AppNavigationContext
+    ) => callback(view, required, context);
     ipcRenderer.on("app:navigate", listener);
     return () => ipcRenderer.removeListener("app:navigate", listener);
   }

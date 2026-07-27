@@ -20,9 +20,11 @@ export default defineConfig({
       reporter: ["text", "json-summary"],
       include: [
         "src/App.tsx",
+        "src/FeedbackHub.tsx",
         "src/FeedbackView.tsx",
         "electron/answer-sync.ts",
         "electron/daily-question-coordinator.ts",
+        "electron/deep-link.ts",
         "electron/notifications.ts",
         "electron/quiet-hours.ts",
         "electron/question-state.ts",
