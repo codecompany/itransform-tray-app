@@ -104,6 +104,23 @@ async function main() {
     if (versionOutput !== `iTransform Pulse ${version}`) {
       throw new Error(`unexpected version: ${versionOutput}`);
     }
+    const packageInstall = path.join(
+      prefix,
+      "lib",
+      "node_modules",
+      "@code-company",
+      "pulsetray"
+    );
+    const runtimeFile = path.join(packageInstall, ".pulsetray-runtime.json");
+    const runtime = JSON.parse(await fs.promises.readFile(runtimeFile, "utf8"));
+    const fakeNpm = path.join(temporary, "fake-npm.cjs");
+    await fs.promises.writeFile(fakeNpm, `console.log(JSON.stringify("${version}"));\n`);
+    runtime.npmExecPath = fakeNpm;
+    await fs.promises.writeFile(runtimeFile, `${JSON.stringify(runtime, null, 2)}\n`);
+    const update = JSON.parse(run(launcher, ["--internal-auto-update-check"]));
+    if (update.status !== "current" || update.latestVersion !== version) {
+      throw new Error(`unexpected update check: ${JSON.stringify(update)}`);
+    }
     run(launcher, ["--smoke"], { env: { ...process.env, PULSETRAY_SMOKE_MARKER: marker } });
     await waitFor(marker);
     console.log("Portable npm install and launcher smoke passed.");
