@@ -108,6 +108,13 @@ export interface FeedbackHistoryResult {
   feedbacks: FeedbackHistoryItem[];
 }
 
+export type RestartBlocker =
+  | "access-form"
+  | "daily-question"
+  | "feedback-form"
+  | "feedback-request"
+  | "settings-form";
+
 export interface PulseTrayApi {
   bootstrap(): Promise<SessionView>;
   requestAccess(email: string): Promise<{ message: string }>;
@@ -124,6 +131,7 @@ export interface PulseTrayApi {
   openManagerHub(): Promise<void>;
   openFeedbacks(): Promise<void>;
   dismissQuestion(): Promise<void>;
+  setRestartBlocker(name: RestartBlocker, blocked: boolean): void;
   logout(): Promise<SessionView>;
   onNavigate(
     callback: (view: AppView, required: boolean, context?: AppNavigationContext) => void

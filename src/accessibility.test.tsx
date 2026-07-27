@@ -40,6 +40,7 @@ function bridge(): PulseTrayApi {
     openManagerHub: vi.fn(),
     openFeedbacks: vi.fn(),
     dismissQuestion: vi.fn(),
+    setRestartBlocker: vi.fn(),
     logout: vi.fn(),
     onNavigate: vi.fn().mockReturnValue(() => undefined)
   };

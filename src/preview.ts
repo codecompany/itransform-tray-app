@@ -115,6 +115,7 @@ export function installPreviewBridge(): void {
     openManagerHub: async () => undefined,
     openFeedbacks: async () => undefined,
     dismissQuestion: async () => undefined,
+    setRestartBlocker: () => undefined,
     logout: async () => {
       state = {
         linked: false,
