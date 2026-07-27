@@ -33,6 +33,14 @@ function TokenScreen({ onLinked }: { onLinked: (session: SessionView) => void })
   const [linkError, setLinkError] = useState("");
   const [success, setSuccess] = useState("");
 
+  useEffect(() => {
+    window.pulseTray.setRestartBlocker(
+      "access-form",
+      Boolean(email.trim() || token.trim() || requestBusy || linkBusy)
+    );
+    return () => window.pulseTray.setRestartBlocker("access-form", false);
+  }, [email, token, requestBusy, linkBusy]);
+
   async function requestAccess(event: React.FormEvent): Promise<void> {
     event.preventDefault();
     setRequestBusy(true);
@@ -183,6 +191,11 @@ function QuestionView({
   const [loading, setLoading] = useState(true);
   const resultRef = useRef<HTMLParagraphElement>(null);
   const questionTitleRef = useRef<HTMLHeadingElement>(null);
+
+  useEffect(() => {
+    window.pulseTray.setRestartBlocker("daily-question", Boolean(selected || busy));
+    return () => window.pulseTray.setRestartBlocker("daily-question", false);
+  }, [selected, busy]);
 
   async function loadQuestion(): Promise<void> {
     setLoading(true);
@@ -388,6 +401,11 @@ function SettingsView({
       : new Set(quietHours.map((window) => `${window.start}-${window.end}`)).size !== quietHours.length
         ? "Remova as janelas de silêncio duplicadas."
         : "";
+
+  useEffect(() => {
+    window.pulseTray.setRestartBlocker("settings-form", dirty || busy);
+    return () => window.pulseTray.setRestartBlocker("settings-form", false);
+  }, [dirty, busy]);
 
   function updateQuietHours(next: typeof quietHours): void {
     setQuietHours(next);

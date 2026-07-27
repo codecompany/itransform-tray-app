@@ -46,6 +46,7 @@ function api(overrides: Partial<PulseTrayApi> = {}): PulseTrayApi {
     openManagerHub: vi.fn().mockResolvedValue(undefined),
     openFeedbacks: vi.fn().mockResolvedValue(undefined),
     dismissQuestion: vi.fn().mockResolvedValue(undefined),
+    setRestartBlocker: vi.fn(),
     logout: vi.fn().mockResolvedValue({
       linked: false,
       configured: false,

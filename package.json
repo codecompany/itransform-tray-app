@@ -1,6 +1,6 @@
 {
   "name": "pulsetray",
-  "version": "0.1.21",
+  "version": "0.1.22",
   "private": true,
   "type": "module",
   "description": "iTransform Pulse desktop client",
@@ -116,5 +116,8 @@
     "electron-winstaller@5.4.0": true,
     "esbuild@0.28.1": true,
     "fsevents@2.3.3": true
+  },
+  "overrides": {
+    "brace-expansion": "5.0.8"
   }
 }

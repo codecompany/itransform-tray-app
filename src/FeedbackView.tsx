@@ -316,6 +316,14 @@ export default function FeedbackView({
     draft.toEmployeeId || draft.method || draft.importance || contentIsDirty(draft.content)
   );
 
+  useEffect(() => {
+    window.pulseTray.setRestartBlocker(
+      "feedback-form",
+      dirty || busy || confirmationPending
+    );
+    return () => window.pulseTray.setRestartBlocker("feedback-form", false);
+  }, [dirty, busy, confirmationPending]);
+
   function selectEmployee(employee: EmployeeOption): void {
     setDraft((current) => ({ ...current, toEmployeeId: employee.id }));
     setRequestId(crypto.randomUUID());

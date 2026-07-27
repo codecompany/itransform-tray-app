@@ -20,6 +20,7 @@ import type {
   EmployeeProfile,
   FeedbackDraft,
   QuietHoursWindow,
+  RestartBlocker,
   SessionView
 } from "../src/contracts.js";
 import {
@@ -54,6 +55,7 @@ import {
   parseFeedbackDeepLink,
   pulseTrayProtocol
 } from "./deep-link.js";
+import { NpmAutoUpdater } from "./npm-auto-update.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const client = new PulseApiClient();
@@ -65,6 +67,8 @@ let questionRequired = false;
 let answerInFlight = false;
 let feedbackInFlight = false;
 let feedbackRequestInFlight = false;
+let npmAutoUpdater: NpmAutoUpdater | undefined;
+const restartBlockers = new Map<number, Set<RestartBlocker>>();
 const feedbackRequests = new IdempotentRequestRegistry<SessionView>();
 const feedbackRequestDeliveries = new IdempotentRequestRegistry<SessionView>();
 let leadershipRefresh: Promise<void> | undefined;
@@ -337,6 +341,8 @@ function createPanelWindow(): BrowserWindow {
     skipTaskbar: true,
     webPreferences: secureWebPreferences()
   });
+  const webContentsId = window.webContents.id;
+  window.webContents.once("destroyed", () => restartBlockers.delete(webContentsId));
   window.on("close", (event) => {
     if (quitting) return;
     event.preventDefault();
@@ -363,6 +369,8 @@ function createQuestionWindow(): BrowserWindow {
     skipTaskbar: true,
     webPreferences: secureWebPreferences()
   });
+  const webContentsId = window.webContents.id;
+  window.webContents.once("destroyed", () => restartBlockers.delete(webContentsId));
   applyQuestionWindowMode(window, false);
   window.on("close", (event) => {
     if (quitting) return;
@@ -411,7 +419,7 @@ async function logout(): Promise<SessionView> {
   return sessionView();
 }
 
-function trusted(event: Electron.IpcMainInvokeEvent): void {
+function trusted(event: Pick<Electron.IpcMainInvokeEvent, "sender">): void {
   const trustedIds = [panelWindow, questionWindow]
     .filter((window): window is BrowserWindow => Boolean(window && !window.isDestroyed()))
     .map((window) => window.webContents.id);
@@ -445,7 +453,39 @@ async function refreshLeadership(): Promise<void> {
   await leadershipRefresh;
 }
 
+function canRestartForUpdate(): boolean {
+  return !quitting &&
+    !questionRequired &&
+    !answerInFlight &&
+    !feedbackInFlight &&
+    !feedbackRequestInFlight &&
+    !leadershipRefresh &&
+    !pendingFeedbackRequesterId &&
+    !panelWindow?.isVisible() &&
+    !questionWindow?.isVisible() &&
+    [...restartBlockers.values()].every((blockers) => blockers.size === 0);
+}
+
 function registerIpc(): void {
+  ipcMain.on("app:restart-blocker", (event, name: unknown, blocked: unknown) => {
+    try {
+      trusted(event);
+    } catch {
+      return;
+    }
+    const allowed: RestartBlocker[] = [
+      "access-form",
+      "daily-question",
+      "feedback-form",
+      "feedback-request",
+      "settings-form"
+    ];
+    if (!allowed.includes(name as RestartBlocker) || typeof blocked !== "boolean") return;
+    const blockers = restartBlockers.get(event.sender.id) ?? new Set<RestartBlocker>();
+    if (blocked) blockers.add(name as RestartBlocker);
+    else blockers.delete(name as RestartBlocker);
+    restartBlockers.set(event.sender.id, blockers);
+  });
   ipcMain.handle("session:bootstrap", async (event) => {
     trusted(event);
     await refreshLeadership();
@@ -665,6 +705,7 @@ if (!hasLock) {
   app.on("before-quit", () => {
     quitting = true;
     scheduler.stop();
+    npmAutoUpdater?.stop();
   });
   void app.whenReady().then(async () => {
     app.setAppUserModelId(APPLICATION_ID);
@@ -732,7 +773,23 @@ if (!hasLock) {
     tray = createTray();
     panelWindow = createPanelWindow();
     registerIpc();
-    powerMonitor.on("resume", () => void scheduler.check(new Date()));
+    npmAutoUpdater = new NpmAutoUpdater({
+      execPath: process.execPath,
+      userDataPath: app.getPath("userData"),
+      currentVersion: app.getVersion(),
+      args: process.argv,
+      canRestart: canRestartForUpdate,
+      quit: () => {
+        quitting = true;
+        scheduler.stop();
+        app.quit();
+      }
+    });
+    npmAutoUpdater.start();
+    powerMonitor.on("resume", () => {
+      void scheduler.check(new Date());
+      void npmAutoUpdater?.checkNow();
+    });
     if (store.snapshot().profile) scheduler.start();
     if (!launchedHidden || !store.snapshot().profile || pendingFeedbackRequesterId) {
       panelWindow.once("ready-to-show", () => {

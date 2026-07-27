@@ -332,6 +332,14 @@ function FeedbackRequestView({
     headingRef.current?.focus();
   }, [sent]);
 
+  useEffect(() => {
+    window.pulseTray.setRestartBlocker(
+      "feedback-request",
+      Boolean(query.trim() || selected || busy)
+    );
+    return () => window.pulseTray.setRestartBlocker("feedback-request", false);
+  }, [query, selected, busy]);
+
   const filtered = useMemo(() => {
     const normalized = query.trim().toLocaleLowerCase("pt-BR");
     const matches = normalized

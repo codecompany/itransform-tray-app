@@ -26,6 +26,8 @@ const api: PulseTrayApi = {
   openManagerHub: () => ipcRenderer.invoke("navigation:manager-hub"),
   openFeedbacks: () => ipcRenderer.invoke("navigation:feedbacks"),
   dismissQuestion: () => ipcRenderer.invoke("question:dismiss"),
+  setRestartBlocker: (name, blocked) =>
+    ipcRenderer.send("app:restart-blocker", name, blocked),
   logout: () => ipcRenderer.invoke("session:logout"),
   onNavigate: (callback) => {
     const listener = (
