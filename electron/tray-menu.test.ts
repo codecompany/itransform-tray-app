@@ -6,49 +6,58 @@ function actions(): TrayMenuActions {
     openDailyQuestion: vi.fn(),
     openSendFeedback: vi.fn(),
     openRequestFeedback: vi.fn(),
-    openReceivedFeedback: vi.fn(),
     openSettings: vi.fn(),
     quit: vi.fn()
   };
 }
 
 describe("tray menu", () => {
-  it("places a separator immediately after the daily question", () => {
-    const template = createTrayMenuTemplate(actions());
-
-    expect(template[0]).toMatchObject({ label: "Questão diária" });
-    expect(template[1]).toEqual({ type: "separator" });
-  });
-
-  it("groups feedback actions and keeps adjustments explicit", () => {
+  it("uses the requested order and labels after linking", () => {
     const callbacks = actions();
-    const template = createTrayMenuTemplate(callbacks);
+    const template = createTrayMenuTemplate(callbacks, true);
 
-    expect(template).toEqual(expect.arrayContaining([
-      expect.objectContaining({
+    expect(template).toEqual([
+      {
+        label: "Pergunta do dia",
+        enabled: true,
+        click: callbacks.openDailyQuestion
+      },
+      { type: "separator" },
+      {
         label: "Enviar feedback",
+        enabled: true,
         click: callbacks.openSendFeedback
-      }),
-      expect.objectContaining({
-        label: "Solicitar feedback",
+      },
+      {
+        label: "Solicitar Feedback",
+        enabled: true,
         click: callbacks.openRequestFeedback
-      }),
-      expect.objectContaining({
-        label: "Feedbacks recebidos",
-        click: callbacks.openReceivedFeedback
-      }),
-      expect.objectContaining({
+      },
+      { type: "separator" },
+      {
         label: "Ajustes",
+        enabled: true,
         click: callbacks.openSettings
-      })
-    ]));
+      },
+      {
+        label: "Encerrar iTransform",
+        click: callbacks.quit
+      }
+    ]);
   });
 
-  it("uses the public product name in the quit action", () => {
-    const template = createTrayMenuTemplate(actions());
+  it("disables session actions before linking and keeps quit available", () => {
+    const template = createTrayMenuTemplate(actions(), false);
 
-    expect(template.at(-1)).toMatchObject({
-      label: "Encerrar iTransform Pulse"
-    });
+    expect(template.filter((item) => item.type !== "separator").map((item) => ({
+      label: item.label,
+      enabled: item.enabled
+    }))).toEqual([
+      { label: "Pergunta do dia", enabled: false },
+      { label: "Enviar feedback", enabled: false },
+      { label: "Solicitar Feedback", enabled: false },
+      { label: "Ajustes", enabled: false },
+      { label: "Encerrar iTransform", enabled: undefined }
+    ]);
   });
 });

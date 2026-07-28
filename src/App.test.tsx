@@ -213,7 +213,8 @@ describe("iTransform Pulse app", () => {
     expect(bridge.getQuestion).not.toHaveBeenCalled();
     expect(screen.queryByRole("button", { name: "Questão" })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Feedbacks" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Ajustes" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Ajustes" }))
+      .toHaveClass("settings-navigation");
   });
 
   it("renders the required daily question on its independent surface", async () => {

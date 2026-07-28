@@ -37,6 +37,12 @@ if (import.meta.env.VITE_VISUAL_SMOKE === "true") {
       }
       await new Promise((resolve) => window.setTimeout(resolve, 250));
       const controls = [...document.querySelectorAll<HTMLElement>("button, input, textarea")];
+      const feedbackNavigation = document.querySelector<HTMLElement>(
+        'button[aria-label="Feedbacks"]'
+      )?.getBoundingClientRect();
+      const settingsNavigation = document.querySelector<HTMLElement>(
+        'button[aria-label="Ajustes"]'
+      )?.getBoundingClientRect();
       const result = {
         innerWidth,
         innerHeight,
@@ -45,6 +51,9 @@ if (import.meta.env.VITE_VISUAL_SMOKE === "true") {
         scrollHeight: document.documentElement.scrollHeight,
         bodyScrollHeight: document.body.scrollHeight,
         journeyError,
+        navigationGap: feedbackNavigation && settingsNavigation
+          ? Math.round(settingsNavigation.top - feedbackNavigation.bottom)
+          : undefined,
         smallControls: controls
           .filter((element) => {
             const box = element.getBoundingClientRect();
