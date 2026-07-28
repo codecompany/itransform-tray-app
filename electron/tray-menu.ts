@@ -1,26 +1,24 @@
 import type { MenuItemConstructorOptions } from "electron";
-import { PRODUCT_NAME } from "../src/product.js";
 
 export interface TrayMenuActions {
   openDailyQuestion(): void;
   openSendFeedback(): void;
   openRequestFeedback(): void;
-  openReceivedFeedback(): void;
   openSettings(): void;
   quit(): void;
 }
 
 export function createTrayMenuTemplate(
-  actions: TrayMenuActions
+  actions: TrayMenuActions,
+  linked: boolean
 ): MenuItemConstructorOptions[] {
   return [
-    { label: "Questão diária", click: actions.openDailyQuestion },
+    { label: "Pergunta do dia", enabled: linked, click: actions.openDailyQuestion },
     { type: "separator" },
-    { label: "Enviar feedback", click: actions.openSendFeedback },
-    { label: "Solicitar feedback", click: actions.openRequestFeedback },
-    { label: "Feedbacks recebidos", click: actions.openReceivedFeedback },
-    { label: "Ajustes", click: actions.openSettings },
+    { label: "Enviar feedback", enabled: linked, click: actions.openSendFeedback },
+    { label: "Solicitar Feedback", enabled: linked, click: actions.openRequestFeedback },
     { type: "separator" },
-    { label: `Encerrar ${PRODUCT_NAME}`, click: actions.quit }
+    { label: "Ajustes", enabled: linked, click: actions.openSettings },
+    { label: "Encerrar iTransform", click: actions.quit }
   ];
 }

@@ -41,7 +41,10 @@ import {
 import { DailyQuestionCoordinator } from "./daily-question-coordinator.js";
 import { shouldPromptAutomatically } from "./question-state.js";
 import { SessionStore } from "./session-store.js";
-import { createTrayMenuTemplate } from "./tray-menu.js";
+import {
+  createTrayMenuTemplate,
+  type TrayMenuActions
+} from "./tray-menu.js";
 import { quietUntil, validateQuietHours } from "./quiet-hours.js";
 import {
   applyQuestionWindowMode,
@@ -75,6 +78,13 @@ let leadershipRefresh: Promise<void> | undefined;
 let store: SessionStore;
 let dailyQuestions: DailyQuestionCoordinator;
 let pendingFeedbackRequesterId = feedbackDeepLinkFromArgs(process.argv)?.requesterId;
+const panelWindowSize = {
+  width: 640,
+  height: 800,
+  minWidth: 520,
+  minHeight: 680
+};
+const feedbackWindowSize = { width: 840, height: 880 };
 
 function sessionView(): SessionView {
   const state = store.snapshot();
@@ -189,8 +199,8 @@ function showPanelWindow(
   const preferred = view === "feedbacks" ||
     view === "request-feedback" ||
     view === "received-feedback"
-    ? { width: 760, height: 820 }
-    : { width: 520, height: 720 };
+    ? feedbackWindowSize
+    : panelWindowSize;
   panelWindow.setSize(
     Math.min(preferred.width, workArea.width - 32),
     Math.min(preferred.height, workArea.height - 32),
@@ -329,10 +339,7 @@ function secureWebPreferences(): Electron.WebPreferences {
 
 function createPanelWindow(): BrowserWindow {
   const window = new BrowserWindow({
-    width: 520,
-    height: 720,
-    minWidth: 440,
-    minHeight: 620,
+    ...panelWindowSize,
     show: false,
     title: PRODUCT_NAME,
     icon: applicationIconPath(),
@@ -390,20 +397,30 @@ function createQuestionWindow(): BrowserWindow {
   return window;
 }
 
-function createTray(): Tray {
-  const appTray = new Tray(trayIcon());
-  appTray.setToolTip(PRODUCT_NAME);
-  appTray.setContextMenu(Menu.buildFromTemplate(createTrayMenuTemplate({
+function trayMenuActions(): TrayMenuActions {
+  return {
     openDailyQuestion: () => showQuestionWindow(false),
     openSendFeedback: () => showPanelWindow("feedbacks"),
     openRequestFeedback: () => showPanelWindow("request-feedback"),
-    openReceivedFeedback: () => showPanelWindow("received-feedback"),
     openSettings: () => showPanelWindow("settings"),
     quit: () => {
       quitting = true;
       app.quit();
     }
-  })));
+  };
+}
+
+function updateTrayMenu(appTray = tray): void {
+  if (!appTray || appTray.isDestroyed()) return;
+  appTray.setContextMenu(Menu.buildFromTemplate(
+    createTrayMenuTemplate(trayMenuActions(), sessionView().linked)
+  ));
+}
+
+function createTray(): Tray {
+  const appTray = new Tray(trayIcon());
+  appTray.setToolTip(PRODUCT_NAME);
+  updateTrayMenu(appTray);
   return appTray;
 }
 
@@ -416,6 +433,7 @@ async function logout(): Promise<SessionView> {
   feedbackRequestDeliveries.clear();
   receivedFeedbackMonitor.reset();
   await store.clear();
+  updateTrayMenu();
   return sessionView();
 }
 
@@ -511,6 +529,7 @@ function registerIpc(): void {
     ).catch(() => undefined);
     const profile = { ...linkedProfile, isLeader };
     await store.link(token, tokens, profile);
+    updateTrayMenu();
     receivedFeedbackMonitor.reset();
     scheduler.start(false);
     setImmediate(() => {

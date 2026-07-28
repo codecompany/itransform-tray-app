@@ -711,7 +711,7 @@ export default function App(): JSX.Element {
             </button>
           )}
           <button
-            className={view === "settings" ? "active" : ""}
+            className={`settings-navigation ${view === "settings" ? "active" : ""}`}
             aria-current={view === "settings" ? "page" : undefined}
             onClick={() => setView("settings")}
             title="Ajustes"

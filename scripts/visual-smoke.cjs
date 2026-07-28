@@ -143,6 +143,9 @@ async function capture(
   if (metrics.smallControls.length > 0) {
     throw new Error(`${name} has controls below 44px: ${JSON.stringify(metrics.smallControls)}`);
   }
+  if (metrics.navigationGap !== undefined && metrics.navigationGap < 80) {
+    throw new Error(`${name} keeps settings too close to feedback: ${JSON.stringify(metrics)}`);
+  }
   return { name, screenshot, ...metrics };
 }
 
@@ -159,16 +162,16 @@ async function capture(
     rendererUrl = `http://127.0.0.1:${address.port}`;
     const results = [];
     results.push(await capture("panel-320x620", 320, 620));
-    results.push(await capture("panel-440x620", 440, 620));
-    results.push(await capture("onboarding-440x620", 440, 620, "panel", "", "token"));
-    results.push(await capture("wizard-method-760x820", 760, 820, "panel", "method"));
-    results.push(await capture("wizard-evidence-760x820", 760, 820, "panel", "evidence"));
-    results.push(await capture("wizard-guidance-760x820", 760, 820, "panel", "guidance"));
-    results.push(await capture("wizard-review-760x820", 760, 820, "panel", "review"));
-    results.push(await capture("wizard-success-760x820", 760, 820, "panel", "success"));
-    results.push(await capture("request-760x820", 760, 820, "panel", "request"));
-    results.push(await capture("received-760x820", 760, 820, "panel", "received"));
-    results.push(await capture("settings-520x720", 520, 720, "panel", "settings"));
+    results.push(await capture("panel-520x680", 520, 680));
+    results.push(await capture("onboarding-520x680", 520, 680, "panel", "", "token"));
+    results.push(await capture("wizard-method-840x880", 840, 880, "panel", "method"));
+    results.push(await capture("wizard-evidence-840x880", 840, 880, "panel", "evidence"));
+    results.push(await capture("wizard-guidance-840x880", 840, 880, "panel", "guidance"));
+    results.push(await capture("wizard-review-840x880", 840, 880, "panel", "review"));
+    results.push(await capture("wizard-success-840x880", 840, 880, "panel", "success"));
+    results.push(await capture("request-840x880", 840, 880, "panel", "request"));
+    results.push(await capture("received-840x880", 840, 880, "panel", "received"));
+    results.push(await capture("settings-640x800", 640, 800, "panel", "settings"));
     results.push(await capture("question-660x720", 660, 720, "question"));
     results.push(await capture(
       "question-empty-660x720",
